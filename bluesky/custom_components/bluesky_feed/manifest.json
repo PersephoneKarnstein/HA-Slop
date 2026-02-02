@@ -1,0 +1,12 @@
+{
+  "domain": "bluesky_feed",
+  "name": "Bluesky Feed",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "after_dependencies": ["frontend"],
+  "documentation": "",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}
