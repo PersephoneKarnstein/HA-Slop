@@ -32,6 +32,115 @@ blueprint:
           entity:
           - domain:
             - light
+    location_section:
+      name: Location Settings
+      description: Configure the location used for solar calculations. Uses your Home Assistant home zone by default.
+      icon: mdi:map-marker
+      collapsed: true
+      input:
+        location_source:
+          name: Location source
+          description: "Choose where to get coordinates for solar calculations.
+            'Home Zone' uses your Home Assistant zone.home location automatically.
+            'Custom' allows you to specify exact latitude and longitude below."
+          default: Home Zone
+          selector:
+            select:
+              options:
+              - Home Zone
+              - Custom
+              sort: false
+              multiple: false
+              custom_value: false
+        custom_latitude:
+          name: Custom latitude
+          description: "Latitude in decimal degrees (-90 to 90). Only used when Location source is 'Custom'.
+            Positive = North, Negative = South. Example: 40.7128 for New York City."
+          default: 0.0
+          selector:
+            number:
+              min: -90.0
+              max: 90.0
+              step: 0.001
+              mode: box
+        custom_longitude:
+          name: Custom longitude
+          description: "Longitude in decimal degrees (-180 to 180). Only used when Location source is 'Custom'.
+            Positive = East, Negative = West. Example: -74.0060 for New York City."
+          default: 0.0
+          selector:
+            number:
+              min: -180.0
+              max: 180.0
+              step: 0.001
+              mode: box
+    sunset_colors_section:
+      name: Colorful Sunsets & Sunrises
+      description: Add warm, colorful lighting effects during sunset and sunrise transitions.
+      icon: mdi:weather-sunset-up
+      collapsed: true
+      input:
+        sunset_colors_enabled:
+          name: Enable colorful transitions
+          description: "When enabled, lights will shift to warm sunset/sunrise colors
+            during the golden hour periods around sunrise and sunset."
+          default: false
+          selector:
+            boolean: {}
+        sunset_colormap:
+          name: Color palette
+          description: "Choose a color palette for sunset/sunrise transitions. Each palette
+            transitions through different colors as the sun moves through the transition zone.
+            Palettes are sampled from matplotlib colormaps and scientific color schemes."
+          default: Golden Hour
+          selector:
+            select:
+              options:
+              - Golden Hour
+              - Inferno
+              - Magma
+              - Twilight
+              - Plasma
+              - Warm Amber
+              sort: false
+              multiple: false
+              custom_value: false
+        sunset_color_intensity:
+          name: Color intensity
+          description: "How vivid the sunset/sunrise colors should be.
+            Lower values = subtle warm tint, Higher values = more saturated colors."
+          default: 70
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: '%'
+              mode: slider
+              step: 5
+        sunset_transition_start:
+          name: Transition start elevation
+          description: "Sun elevation (degrees) when colorful transition begins.
+            Higher values = colors start earlier before sunset / later after sunrise."
+          default: 10
+          selector:
+            number:
+              min: -5
+              max: 25
+              unit_of_measurement: '°'
+              mode: slider
+              step: 1
+        sunset_transition_end:
+          name: Transition end elevation
+          description: "Sun elevation (degrees) when colorful transition reaches peak intensity.
+            This should be lower than the start elevation."
+          default: 0
+          selector:
+            number:
+              min: -10
+              max: 15
+              unit_of_measurement: '°'
+              mode: slider
+              step: 1
     circadian_section:
       name: Circadian Settings
       icon: mdi:theme-light-dark
@@ -278,6 +387,17 @@ blueprint:
               multiple: false
   source_url: https://gist.githubusercontent.com/dimkaram/39cfe8e996aaa7f3fe3727495b120ce5/raw/31dc4aeb615af947b342840720b397d0f51226ec/advanced_circadian_lighting.yaml
 variables:
+  # Location inputs
+  location_source: !input location_source
+  custom_latitude: !input custom_latitude
+  custom_longitude: !input custom_longitude
+  # Sunset colors inputs
+  sunset_colors_enabled: !input sunset_colors_enabled
+  sunset_colormap: !input sunset_colormap
+  sunset_color_intensity: !input sunset_color_intensity
+  sunset_transition_start: !input sunset_transition_start
+  sunset_transition_end: !input sunset_transition_end
+  # Sleep mode
   sleep_mode: !input sleep_mode
   sleep_entity: !input sleep_entity
   sleep_on: "{# Boolean for sleep on trigger #} {{ trigger is defined\n    and trigger.platform
@@ -301,8 +421,14 @@ variables:
   circadian_function: !input circadian_function
   ephemeris_calculation: >-
     {# Solar ephemeris calculation using NOAA algorithms #}
-    {%- set lat = state_attr('zone.home', 'latitude') | float(0) -%}
-    {%- set lon = state_attr('zone.home', 'longitude') | float(0) -%}
+    {# Use custom coordinates if specified, otherwise use zone.home #}
+    {%- if location_source == 'Custom' -%}
+      {%- set lat = custom_latitude | float(0) -%}
+      {%- set lon = custom_longitude | float(0) -%}
+    {%- else -%}
+      {%- set lat = state_attr('zone.home', 'latitude') | float(0) -%}
+      {%- set lon = state_attr('zone.home', 'longitude') | float(0) -%}
+    {%- endif -%}
     {%- set dt = now() -%}
     {%- set tz_offset = dt.utcoffset().total_seconds() / 3600 -%}
     {%- set year = dt.year -%}
@@ -379,6 +505,67 @@ variables:
     {%- set hstr = '0' ~ h if h < 10 else h | string -%}
     {%- set mstr = '0' ~ m if m < 10 else m | string -%}
     {{ hstr ~ ':' ~ mstr ~ ':00' }}
+  # Colorful sunset/sunrise calculations with matplotlib-style colormaps
+  sunset_color_calculation: >-
+    {%- set elev = sun_elevation | float(0) -%}
+    {%- set is_rising = sun_is_rising -%}
+    {%- set enabled = sunset_colors_enabled -%}
+    {%- set intensity = sunset_color_intensity | float(70) / 100 -%}
+    {%- set cmap = sunset_colormap -%}
+    {%- set trans_start = sunset_transition_start | float(10) -%}
+    {%- set trans_end = sunset_transition_end | float(0) -%}
+    {%- set in_transition = false -%}
+    {%- set blend = 0.0 -%}
+    {%- if enabled -%}
+      {%- if not is_rising and elev <= trans_start and elev >= trans_end -%}
+        {%- set in_transition = true -%}
+        {%- if trans_start != trans_end -%}
+          {%- set blend = (trans_start - elev) / (trans_start - trans_end) -%}
+        {%- else -%}
+          {%- set blend = 1.0 -%}
+        {%- endif -%}
+      {%- elif is_rising and elev >= trans_end and elev <= trans_start -%}
+        {%- set in_transition = true -%}
+        {%- if trans_start != trans_end -%}
+          {%- set blend = 1.0 - ((trans_start - elev) / (trans_start - trans_end)) -%}
+        {%- else -%}
+          {%- set blend = 0.0 -%}
+        {%- endif -%}
+      {%- endif -%}
+    {%- endif -%}
+    {%- set result_hue = 30 -%}
+    {%- set result_sat = 80 -%}
+    {%- if in_transition -%}
+      {%- if cmap == 'Inferno' -%}
+        {%- set result_hue = 280 + blend * (55 - 280 + 360) -%}
+        {%- if result_hue >= 360 -%}{%- set result_hue = result_hue - 360 -%}{%- endif -%}
+        {%- set result_sat = (60 + blend * 25) * intensity -%}
+      {%- elif cmap == 'Magma' -%}
+        {%- set result_hue = 280 + blend * (40 - 280 + 360) -%}
+        {%- if result_hue >= 360 -%}{%- set result_hue = result_hue - 360 -%}{%- endif -%}
+        {%- set result_sat = (50 + blend * 20) * intensity -%}
+      {%- elif cmap == 'Twilight' -%}
+        {%- set result_hue = 240 + blend * (25 - 240 + 360) -%}
+        {%- if result_hue >= 360 -%}{%- set result_hue = result_hue - 360 -%}{%- endif -%}
+        {%- set result_sat = (60 + blend * 25) * intensity -%}
+      {%- elif cmap == 'Plasma' -%}
+        {%- set result_hue = 290 + blend * (55 - 290 + 360) -%}
+        {%- if result_hue >= 360 -%}{%- set result_hue = result_hue - 360 -%}{%- endif -%}
+        {%- set result_sat = (70 + blend * 10) * intensity -%}
+      {%- elif cmap == 'Warm Amber' -%}
+        {%- set result_hue = 40 - blend * 20 -%}
+        {%- set result_sat = (60 + blend * 35) * intensity -%}
+      {%- else -%}
+        {%- set result_hue = 45 - blend * 37 -%}
+        {%- set result_sat = (70 + blend * 30) * intensity -%}
+      {%- endif -%}
+    {%- endif -%}
+    {{ {'active': in_transition, 'blend': blend, 'hue': result_hue | round(1), 'saturation': result_sat | round(1)} | tojson }}
+  sunset_color_data: "{{ sunset_color_calculation | from_json }}"
+  sunset_color_active: "{{ sunset_color_data.active }}"
+  sunset_color_blend: "{{ sunset_color_data.blend | float(0) }}"
+  sunset_color_hue: "{{ sunset_color_data.hue | float(30) }}"
+  sunset_color_saturation: "{{ sunset_color_data.saturation | float(80) }}"
   circadian_position: >-
     {# Calculate sun position from -1 to 0 in nighttime and 0 to 1 in daytime #}
     {%- set dt_current = now() -%}
@@ -404,8 +591,7 @@ variables:
   circadian_coefficient: "{# Calculate coefficient based on selected circadian function
     #} {%- if is_state(sleep_entity,'on') and sleep_mode == 'Night' -%}\n  {%- set
     coefficient = 0.0 -%}\n{%- elif is_state(sleep_entity,'on') and sleep_mode ==
-    'Day' -%}\n  {%- set coefficient = 1.0 -%}\n{%- elif circadian_function == 'Day-only
-    (half-sine)' -%}\n  {%- set coefficient = sin( pi*([circadian_position,0]|max)
+    'Day' -%}\n  {%- set coefficient = 1.0 -%}\n{%- elif circadian_function == 'Peak at noon (half-sine)' -%}\n  {%- set coefficient = sin( pi*([circadian_position,0]|max)
     ) -%}\n{%- elif circadian_function == 'Peak at noon (cosine)' -%}\n  {%- set coefficient
     = 0.5 - 0.5 * cos( 2*pi*([circadian_position,0]|max) ) -%}\n{%- elif circadian_function
     == 'Peak at midnight (half-sine)' -%}\n  {%- set coefficient = 1 - sin( pi*([circadian_position,0]|min)
@@ -443,11 +629,25 @@ variables:
     ) + 0.5)|int }}\n{%- endif -%}"
   circadian_hue_default_input: !input circadian_hue_default
   circadian_hue_default: '{{ circadian_hue_default_input|float }}'
-  circadian_hue_value: "{# Color hue value to adjust to #} {%- if circadian_angle
+  circadian_hue_base: "{# Base hue from circadian cycle #} {%- if circadian_angle
     < 0 -%}\n  {{ circadian_hue_default }}\n{%- else -%}\n  {{ (360 * circadian_angle
     + 0.5)|int }}\n{%- endif -%}"
+  circadian_hue_value: >-
+    {# Final hue value - use sunset colormap hue when transition is active #}
+    {%- if sunset_color_active -%}
+      {{ sunset_color_hue | float | round(0) | int }}
+    {%- else -%}
+      {{ circadian_hue_base | int }}
+    {%- endif -%}
   circadian_saturation_default_input: !input circadian_saturation_default
   circadian_saturation_default: '{{ circadian_saturation_default_input|float }}'
+  circadian_saturation_value: >-
+    {# Final saturation value - use sunset colormap saturation when transition is active #}
+    {%- if sunset_color_active -%}
+      {{ sunset_color_saturation | float | round(0) | int }}
+    {%- else -%}
+      {{ circadian_saturation_default | int }}
+    {%- endif -%}
   elevation_switch_on_input: !input elevation_switch_on
   elevation_switch_on: '{{ elevation_switch_on_input }}'
   elevation_switch_off_input: !input elevation_switch_off
@@ -747,7 +947,7 @@ action:
             brightness: '{{ elevation_brightness }}'
             hs_color:
             - '{{ circadian_hue_value }}'
-            - '{{ circadian_saturation_default }}'
+            - '{{ circadian_saturation_value }}'
     - choose:
       - conditions: '{{ lights_off_temperature | length > 0 }}'
         sequence:
@@ -774,7 +974,7 @@ action:
             brightness: '{{ circadian_brightness_value }}'
             hs_color:
             - '{{ circadian_hue_value }}'
-            - '{{ circadian_saturation_default }}'
+            - '{{ circadian_saturation_value }}'
     - choose:
       - conditions: '{{ lights_trigger_temperature | length > 0 }}'
         sequence:
@@ -800,7 +1000,7 @@ action:
           brightness: '{{ circadian_brightness_value }}'
           hs_color:
           - '{{ circadian_hue_value }}'
-          - '{{ circadian_saturation_default }}'
+          - '{{ circadian_saturation_value }}'
   - choose:
     - conditions: '{{ lights_on_temperature | length > 0 }}'
       sequence:
@@ -825,7 +1025,7 @@ action:
           brightness: '{{ elevation_brightness }}'
           hs_color:
           - '{{ circadian_hue_value }}'
-          - '{{ circadian_saturation_default }}'
+          - '{{ circadian_saturation_value }}'
   - choose:
     - conditions: '{{ lights_dim_temperature | length > 0 }}'
       sequence:
