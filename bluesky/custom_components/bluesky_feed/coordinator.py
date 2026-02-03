@@ -102,6 +102,19 @@ class BlueskyFeedCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 else:
                     await self._create_session()
 
+    @staticmethod
+    async def _is_token_expired(resp: aiohttp.ClientResponse) -> bool:
+        """Check if a response indicates an expired token."""
+        if resp.status == 401:
+            return True
+        if resp.status == 400:
+            try:
+                body = await resp.json()
+                return body.get("error") == "ExpiredToken"
+            except Exception:
+                pass
+        return False
+
     async def _api_get(
         self, url: str, params: dict, auth: bool = True
     ) -> dict:
@@ -112,7 +125,7 @@ class BlueskyFeedCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, params=params) as resp:
-                if resp.status == 401 and auth:
+                if auth and await self._is_token_expired(resp):
                     await self._refresh_session()
                     headers["Authorization"] = f"Bearer {self._access_jwt}"
                     async with session.get(
@@ -144,7 +157,7 @@ class BlueskyFeedCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
             async with session.post(
                 url, headers=headers, json=payload
             ) as resp:
-                if resp.status == 401 and auth:
+                if auth and await self._is_token_expired(resp):
                     await self._refresh_session()
                     headers["Authorization"] = f"Bearer {self._access_jwt}"
                     async with session.post(
