@@ -1,5 +1,7 @@
 # Citizen Incidents for Home Assistant
 
+![citizen](../citizen.png)
+
 A Home Assistant custom integration that displays live [Citizen](https://citizen.com) incident reports as geo-location entities on the HA map. Incidents are color-coded by recency and disappear automatically when they leave the Citizen feed.
 
 Two deployment options are included:

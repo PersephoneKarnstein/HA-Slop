@@ -11,6 +11,7 @@ from homeassistant.components.geo_location import GeolocationEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, UnitOfLength
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -108,6 +109,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Citizen geo-location platform."""
+    # Purge stale entity registry entries from previous runs. All entities
+    # are ephemeral and rebuilt from the API, so a clean slate is correct.
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        ent_reg.async_remove(reg_entry.entity_id)
+
     config = hass.data[DOMAIN][entry.entry_id]
 
     center_lat = config[CONF_LATITUDE]
@@ -417,5 +424,11 @@ class CitizenIncidentEvent(GeolocationEvent):
         """Remove this entity when the incident is no longer in the feed."""
         if not self._removed:
             self._removed = True
-            if self.hass:
+            if self.hass and self.entity_id:
+                ent_reg = er.async_get(self.hass)
+                if ent_reg.async_get(self.entity_id):
+                    ent_reg.async_remove(self.entity_id)
+                else:
+                    self.hass.async_create_task(self.async_remove())
+            elif self.hass:
                 self.hass.async_create_task(self.async_remove())

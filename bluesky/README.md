@@ -1,5 +1,7 @@
 # Bluesky Feed for Home Assistant
 
+![bluesky](../bsky-feed.png)
+
 A custom Home Assistant integration that displays your Bluesky social feed as a Lovelace dashboard card. Supports your home timeline, a specific user's posts, or any custom feed.
 
 ## Features

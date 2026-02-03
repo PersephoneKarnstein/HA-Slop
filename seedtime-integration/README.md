@@ -1,5 +1,7 @@
 # Seedtime Garden Planner — Home Assistant Integration
 
+![seedtime](../seedtime.png)
+
 A custom Home Assistant integration that connects to [Seedtime.us](https://seedtime.us) and renders your garden plan as an interactive SVG card with crop tooltips and a timeline slider.
 
 ## Features
