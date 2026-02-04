@@ -243,16 +243,16 @@ blueprint:
       collapsed: true
       input:
         elevation_switch_on:
-          name: Dim lights on based on sun elevation
-          description: Normally, the lights will dim on at sunset, and they will be turned
-            on during nightime.
+          name: Gradually turn on at sunset
+          description: Lights will dim up from 0% as the sun descends below the elevation
+            threshold. When disabled, lights switch on instantly at the threshold.
           default: true
           selector:
             boolean: {}
         elevation_switch_off:
-          name: Dim lights off based on sun elevation
-          description: Normally, the lights will dim off at sunrise, and they will be
-            turned off during daytime.
+          name: Gradually turn off at sunrise
+          description: Lights will dim down to 0% as the sun rises above the elevation
+            threshold. When disabled, lights switch off instantly at the threshold.
           default: true
           selector:
             boolean: {}
