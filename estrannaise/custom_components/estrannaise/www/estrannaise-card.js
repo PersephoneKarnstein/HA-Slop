@@ -226,10 +226,10 @@ if (!customElements.get('estrannaise-card')) {
       };
       // Backward compat: convert legacy hours_* to days_*
       if ('hours_to_show' in config && !('days_to_show' in config)) {
-        base.days_to_show = Math.round(config.hours_to_show / 24);
+        base.days_to_show = Math.max(1, Math.round(config.hours_to_show / 24));
       }
       if ('hours_to_predict' in config && !('days_to_predict' in config)) {
-        base.days_to_predict = Math.round(config.hours_to_predict / 24);
+        base.days_to_predict = Math.max(1, Math.round(config.hours_to_predict / 24));
       }
       // Default prediction_color to line_color if not explicitly set
       if (!config.prediction_color) {
@@ -637,7 +637,7 @@ if (!customElements.get('estrannaise-card')) {
         e2NowRaw += computeE2(tDays, dose.dose_mg, dose.model, pkParams, patchWearDays);
       }
       let e2Now = e2NowRaw * scalingFactor * cf;
-      if (baselineE2 > 0) e2Now += baselineE2 * cf;
+      if (baselineE2 > 0 && now >= baselineTestTs) e2Now += baselineE2 * cf;
       histX.push(nowDate);
       histY.push(Math.max(0, e2Now));
       predX.unshift(nowDate);
@@ -1103,10 +1103,10 @@ if (!customElements.get('estrannaise-card-editor')) {
       this.config = { ...config };
       // Backward compat: convert legacy hours_* to days_*
       if ('hours_to_show' in config && !('days_to_show' in config)) {
-        this.config.days_to_show = Math.round(config.hours_to_show / 24);
+        this.config.days_to_show = Math.max(1, Math.round(config.hours_to_show / 24));
       }
       if ('hours_to_predict' in config && !('days_to_predict' in config)) {
-        this.config.days_to_predict = Math.round(config.hours_to_predict / 24);
+        this.config.days_to_predict = Math.max(1, Math.round(config.hours_to_predict / 24));
       }
       // Only rebuild the form on initial load; skip when the change
       // originated from the form itself (avoids stealing input focus).

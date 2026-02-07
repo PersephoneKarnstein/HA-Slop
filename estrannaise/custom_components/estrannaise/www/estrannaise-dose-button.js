@@ -38,6 +38,21 @@ function friendlyModelName(model) {
   return `${esterName} (${methodName})`;
 }
 
+// Ester+method → PK model key (must stay in sync with const.py ESTER_METHOD_TO_MODEL)
+const DOSE_BTN_MODEL_MAP = {
+  'EB|im': 'EB im', 'EV|im': 'EV im', 'EEn|im': 'EEn im',
+  'EC|im': 'EC im', 'EUn|im': 'EUn im',
+  'EB|subq': 'EB im', 'EV|subq': 'EV im', 'EEn|subq': 'EEn im',
+  'EC|subq': 'EC im', 'EUn|subq': 'EUn casubq',
+  'E|patch': 'patch', 'E|oral': 'E oral',
+};
+
+function resolveModelFromConfig(cfg) {
+  const key = DOSE_BTN_MODEL_MAP[`${cfg.ester}|${cfg.method}`];
+  if (key === 'patch') return (cfg.interval_days || 7) <= 5 ? 'patch tw' : 'patch ow';
+  return key || null;
+}
+
 if (!customElements.get('estrannaise-dose-button')) {
 
   class EstrannaiseDoseButton extends HTMLElement {
@@ -273,7 +288,7 @@ if (!customElements.get('estrannaise-dose-button')) {
       const seen = new Set();
       const models = [];
       for (const cfg of allConfigs) {
-        const model = cfg.model;
+        const model = resolveModelFromConfig(cfg);
         if (!model || seen.has(model)) continue;
         seen.add(model);
         models.push({
@@ -346,7 +361,7 @@ if (!customElements.get('estrannaise-dose-button')) {
       const input = this.shadowRoot.querySelector('.dose-amount');
 
       // Update dose default to match selected model's configured dose
-      const cfg = allConfigs.find(c => c.model === modelValue);
+      const cfg = allConfigs.find(c => resolveModelFromConfig(c) === modelValue);
       if (cfg) {
         input.value = cfg.dose_mg;
       }
