@@ -1,5 +1,7 @@
 # Estrannaise HRT Monitor
 
+![estrannaise](../estrannaise.png)
+
 A Home Assistant custom integration for tracking estradiol levels using pharmacokinetic modeling. Based on [estrannaise.js](https://github.com/WHSAH/estrannaise.js).
 
 All data is stored locally in a SQLite database and never touches the network.
@@ -132,7 +134,7 @@ When enabled, scheduled doses appear as events on your Home Assistant calendar. 
 
 The integration uses a three-compartment pharmacokinetic model from [estrannaise.js](https://github.com/WHSAH/estrannaise.js), with parameters estimated via MAP estimation and MCMC in Esterlabe.jl (unreleased). For each dose, the blood E2 contribution at time $t$ (days after dosing) is:
 
-$$E_2(t) = \frac{d \, k_2 \, k_3}{(k_1 - k_2)(k_1 - k_3)} \left( k_1 \, e^{-k_1 t} \;-\; k_2 \, e^{-k_2 t} \;-\; k_3 \, e^{-k_3 t} \right)$$
+$$E_2(t) = \frac{d ~ k_2 ~ k_3}{(k_1 - k_2)(k_1 - k_3)} \left( k_1 ~ e^{-k_1 t} - k_2 ~ e^{-k_2 t} - k_3 ~ e^{-k_3 t} \right)$$
 
 where $d$, $k_1$, $k_2$, $k_3$ are ester/method-specific parameters. The total $E_2$ at any time is the sum of contributions from all past doses across all configured regimens.
 
