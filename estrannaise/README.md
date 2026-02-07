@@ -33,13 +33,12 @@ Oral micronized estradiol is modeled using the same three-compartment framework 
 
 3. Go to **Settings > Devices & Services > Add Integration** and search for **Estrannaise HRT Monitor**.
 
-4. Follow the config flow to set up your dosing regimen:
-   - **Ester** (e.g., Estradiol Enanthate) then **method** (only methods valid for the chosen ester are shown)
-   - **Setup mode**: Manual (enter dose/interval yourself) or Auto-generate (targets a trough of ~200 pg/mL, or approximates a menstrual cycle)
-   - **Dose and interval** (manual mode)
-   - **Tracking mode**: Manual (log each dose via button), Automatic (recurring schedule), or Both
-   - **Dose time of day** and optional **cycle day offset** (for phase-shifted schedules)
-   - **Units** (pg/mL or pmol/L) and optional **calendar integration**
+4. Follow the config flow to set up your dosing regimen. Three setup modes are available:
+   - **Guided** — a beginner-friendly wizard that asks method-specific questions (pill dose, injection volume, patch strength, etc.) and computes the regimen for you
+   - **Manual** — enter ester, method, dose, and interval directly
+   - **Auto-generate (beta)** — targets a trough of ~200 pg/mL or approximates a natural menstrual cycle using NNLS cycle fitting
+
+   All modes then ask for tracking mode (Manual / Automatic / Both), dose time of day, units (pg/mL or pmol/L), and optional calendar integration.
 
 5. Add the Lovelace cards to your dashboard (see below).
 
@@ -66,6 +65,7 @@ Card editor options:
 - **Show target range**: Blue band at 100-200 pg/mL
 - **Show danger threshold**: Red band above 500 pg/mL
 - **Show menstrual cycle overlay**: Reference menstrual cycle E2 curve (p5-p95 band)
+- **Show dose markers**: Toggle dose chevrons and spike lines on/off (default: on)
 - **Line / prediction color**: Customize the trace colors
 
 The chart displays:
@@ -102,11 +102,17 @@ Opens a dialog to record blood test results (level in pg/mL). The model uses blo
 
 You can add multiple integration entries (e.g., 3mg EEn every 7 days + 10mg EEn every 28 days). Each entry's doses are aggregated additively on the same chart. When doses from different regimens coincide (within 1 hour, same ester), they appear as a single merged chevron and calendar event showing the combined dose.
 
-## Auto-generate mode
+## Auto-generate mode (beta)
 
 When choosing "Auto-generate" during setup, you can target:
 - **Target range**: Computes a single dose/interval to maintain a trough around 200 pg/mL
 - **Menstrual range**: Uses NNLS cycle fitting to find up to 4 dose schedules that approximate the estradiol curve of a natural menstrual cycle (~100 pg/mL average). Each schedule becomes a separate integration entry.
+
+This mode is marked beta — it works well for most ester/method combinations but the computed regimens should be reviewed with your healthcare provider.
+
+## Backfill
+
+When using Automatic or Both tracking mode, the integration can backfill up to 90 days of past scheduled doses so the chart shows a complete history from the first render. The guided setup asks "Have you been on this schedule for a while?" — answering yes enables backfill. It can also be toggled via the integration's options flow.
 
 ## Calendar integration
 
@@ -124,13 +130,13 @@ When enabled, scheduled doses appear as events on your Home Assistant calendar. 
 
 ## How the PK model works
 
-The integration uses a three-compartment pharmacokinetic model from [estrannaise.js](https://github.com/WHSAH/estrannaise.js), with parameters estimated via Bayesian inference ([Esterlabe.jl](https://github.com/WHSAH/estrannaise.js)). For each dose, the blood E2 contribution at time *t* (days after dosing) is:
+The integration uses a three-compartment pharmacokinetic model from [estrannaise.js](https://github.com/WHSAH/estrannaise.js), with parameters estimated via Bayesian inference ([Esterlabe.jl](https://github.com/WHSAH/estrannaise.js)). For each dose, the blood E2 contribution at time $t$ (days after dosing) is:
 
-```
-E2(t) = d * (k1*e^(-k1*t) - k2*e^(-k2*t) - k3*e^(-k3*t)) / ((k1-k2)*(k1-k3)/(k2*k3))
-```
+$$E_2(t) = \frac{d \, k_2 \, k_3}{(k_1 - k_2)(k_1 - k_3)} \left( k_1 \, e^{-k_1 t} \;-\; k_2 \, e^{-k_2 t} \;-\; k_3 \, e^{-k_3 t} \right)$$
 
-where *d*, *k1*, *k2*, *k3* are ester/method-specific parameters. The total E2 at any time is the sum of contributions from all past doses across all configured regimens.
+where $d$, $k_1$, $k_2$, $k_3$ are ester/method-specific parameters. The total $E_2$ at any time is the sum of contributions from all past doses across all configured regimens.
+
+Transdermal patches use the same three-compartment model, extended with a wear duration: the patch delivers a constant input during wear, then the residual compartments decay after removal. Patch PK parameters are calibrated for mcg/day input (e.g., a 100 mcg/day patch passes 100 to the model, not 0.1 mg).
 
 Blood test calibration computes an exponentially-weighted average scaling factor (recent tests weighted more), clamped between 0 and 2, so predictions gradually align with your measured levels.
 
