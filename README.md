@@ -4,11 +4,19 @@ A collection of custom [Home Assistant](https://www.home-assistant.io/) integrat
 
 ## Integrations
 
+### [Estrogen Monitor](estrannaise/)
+
+![estrannaise](estrannaise.png)
+
+Based on [the Estrogen Pharmacokinetics Playground](https://estrannai.se/) and Katie Tightpussy's [A Practical Guide To Feminizing Hrt](https://pghrt.diy/), allows you to track and estimate blood estrogen levels based on pharmacokinetic models. Users can set dosing method, estrogen ester, and dosing date, all of which affect the model realistically, and the model auto-adjusts to match its estimations to recorded blood tests. All data is stored fully locally and never touches the web, for privacy.
+
+See [estrannaise/README.md](estrannaise/README.md) for setup and configuration.
+
 ### [Bluesky Feed](bluesky/)
 
 ![bluesky](bsky-feed.png)
 
-Displays a Bluesky social media feed as a Lovelace dashboard card. Supports the authenticated user's timeline, a specific author's posts, or a custom feed URI. Features interactive like/repost buttons, rich text rendering, images, quoted posts, and external link previews. Distributed via HACS.
+Displays a Bluesky social media feed as a Lovelace dashboard card. Supports the authenticated user's timeline, a specific author's posts, or a custom feed URI. Features interactive like/repost buttons, rich text rendering, images, quoted posts, and external link previews.
 
 See [bluesky/README.md](bluesky/README.md) for setup and configuration.
 
