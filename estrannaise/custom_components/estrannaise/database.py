@@ -303,9 +303,13 @@ class EstrannaisDatabase:
 
     # ── Stale dose pruning ───────────────────────────────────────────────────
 
-    async def prune_stale_doses(self, config_entry_id: str) -> int:
+    async def prune_stale_doses(
+        self, config_entry_id: str, min_retention_days: float = 0.0
+    ) -> int:
         """Remove doses whose contribution has decayed to ~1% of peak.
 
+        When *min_retention_days* is set (e.g. for backfill entries), doses
+        are kept for at least that many days regardless of the PK model.
         Returns the number of rows deleted.
         """
         if self._db is None:
@@ -315,7 +319,9 @@ class EstrannaisDatabase:
 
         async with self._write_lock:
             for model, _params in PK_PARAMETERS.items():
-                max_age_days = terminal_elimination_days(model)
+                max_age_days = max(
+                    terminal_elimination_days(model), min_retention_days
+                )
                 cutoff_ts = now - (max_age_days * 86400.0)
                 cursor = await self._db.execute(
                     "DELETE FROM doses WHERE config_entry_id = ? "

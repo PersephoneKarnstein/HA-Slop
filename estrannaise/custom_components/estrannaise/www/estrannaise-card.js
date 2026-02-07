@@ -198,6 +198,7 @@ if (!customElements.get('estrannaise-card')) {
         days_to_predict: 7,
         show_target_range: true,
         show_menstrual_cycle: false,
+        show_dose_chevrons: true,
       };
     }
 
@@ -216,6 +217,7 @@ if (!customElements.get('estrannaise-card')) {
         show_target_range: true,
         show_danger_threshold: false,
         show_menstrual_cycle: false,
+        show_dose_chevrons: true,
         line_color: '#E91E63',
         target_color: 'rgba(33,150,243,0.13)',
         danger_color: 'rgba(244,67,54,0.10)',
@@ -814,58 +816,60 @@ if (!customElements.get('estrannaise-card')) {
       }
 
       // Dose event chevrons at bottom of chart (merged display doses)
-      const manualChevX = [], manualChevY = [], manualChevText = [];
-      const autoChevX = [], autoChevY = [], autoChevText = [];
-      for (const dose of mergedDoses) {
-        if (dose.timestamp < tMin || dose.timestamp > tMax) continue;
-        const x = new Date(dose.timestamp * 1000);
-        const modelParts = (dose.model || '').split(' ');
-        const esterName = esters[modelParts[0]] || dose.model;
-        const label = `${dose.dose_mg}mg ${esterName}`;
-        if (dose.source === 'manual') {
-          manualChevX.push(x);
-          manualChevY.push(0);
-          manualChevText.push(label);
-        } else {
-          autoChevX.push(x);
-          autoChevY.push(0);
-          autoChevText.push(label + ' (scheduled)');
+      if (this.config.show_dose_chevrons !== false) {
+        const manualChevX = [], manualChevY = [], manualChevText = [];
+        const autoChevX = [], autoChevY = [], autoChevText = [];
+        for (const dose of mergedDoses) {
+          if (dose.timestamp < tMin || dose.timestamp > tMax) continue;
+          const x = new Date(dose.timestamp * 1000);
+          const modelParts = (dose.model || '').split(' ');
+          const esterName = esters[modelParts[0]] || dose.model;
+          const label = `${dose.dose_mg}mg ${esterName}`;
+          if (dose.source === 'manual') {
+            manualChevX.push(x);
+            manualChevY.push(0);
+            manualChevText.push(label);
+          } else {
+            autoChevX.push(x);
+            autoChevY.push(0);
+            autoChevText.push(label + ' (scheduled)');
+          }
         }
-      }
-      if (manualChevX.length > 0) {
-        traces.push({
-          x: manualChevX,
-          y: manualChevY,
-          type: 'scatter',
-          mode: 'markers',
-          name: 'Manual doses',
-          marker: {
-            color: this.config.dose_marker_color,
-            size: 12,
-            symbol: 'triangle-up',
-          },
-          hovertemplate: '<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>',
-          text: manualChevText,
-          cliponaxis: false,
-        });
-      }
-      if (autoChevX.length > 0) {
-        traces.push({
-          x: autoChevX,
-          y: autoChevY,
-          type: 'scatter',
-          mode: 'markers',
-          name: 'Scheduled doses',
-          marker: {
-            color: this.config.dose_marker_color,
-            size: 10,
-            symbol: 'triangle-up',
-            opacity: 0.4,
-          },
-          hovertemplate: '<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>',
-          text: autoChevText,
-          cliponaxis: false,
-        });
+        if (manualChevX.length > 0) {
+          traces.push({
+            x: manualChevX,
+            y: manualChevY,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Manual doses',
+            marker: {
+              color: this.config.dose_marker_color,
+              size: 12,
+              symbol: 'triangle-up',
+            },
+            hovertemplate: '<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>',
+            text: manualChevText,
+            cliponaxis: false,
+          });
+        }
+        if (autoChevX.length > 0) {
+          traces.push({
+            x: autoChevX,
+            y: autoChevY,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Scheduled doses',
+            marker: {
+              color: this.config.dose_marker_color,
+              size: 10,
+              symbol: 'triangle-up',
+              opacity: 0.4,
+            },
+            hovertemplate: '<b>%{text}</b><br>%{x|%b %d %H:%M}<extra></extra>',
+            text: autoChevText,
+            cliponaxis: false,
+          });
+        }
       }
 
       // ── Layout ─────────────────────────────────────────────────────────
@@ -955,7 +959,9 @@ if (!customElements.get('estrannaise-card')) {
         }
 
         // ── Dose spike lines (proximity-triggered vertical lines at dose positions) ──
-        this._setupDoseSpikes(layout.margin, tMin, tMax, yAxisMax, mergedDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineTestTs, now, esters);
+        if (this.config.show_dose_chevrons !== false) {
+          this._setupDoseSpikes(layout.margin, tMin, tMax, yAxisMax, mergedDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineTestTs, now, esters);
+        }
       }
     }
 
@@ -1136,6 +1142,7 @@ if (!customElements.get('estrannaise-card-editor')) {
         show_target_range: this.config.show_target_range !== false,
         show_danger_threshold: !!this.config.show_danger_threshold,
         show_menstrual_cycle: !!this.config.show_menstrual_cycle,
+        show_dose_chevrons: this.config.show_dose_chevrons !== false,
         line_color: hexToRgb(this.config.line_color || '#E91E63'),
         prediction_color: hexToRgb(this.config.prediction_color || this.config.line_color || '#E91E63'),
       };
@@ -1157,6 +1164,7 @@ if (!customElements.get('estrannaise-card-editor')) {
         { name: 'show_target_range', label: 'Show target range', selector: { boolean: {} } },
         { name: 'show_danger_threshold', label: 'Show danger threshold (>500 pg/mL)', selector: { boolean: {} } },
         { name: 'show_menstrual_cycle', label: 'Show menstrual cycle overlay', selector: { boolean: {} } },
+        { name: 'show_dose_chevrons', label: 'Show dose markers', selector: { boolean: {} } },
         { name: 'line_color', label: 'Line color', selector: { color_rgb: {} } },
         { name: 'prediction_color', label: 'Prediction color', selector: { color_rgb: {} } },
       ];

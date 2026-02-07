@@ -339,9 +339,9 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
 
             if config.get("backfill_doses", False):
-                # Backfill: go back as far as doses are PK-relevant
-                max_age = terminal_elimination_days(sch_model)
-                lookback_ts = now - max_age * 86400.0
+                # Backfill: fill the full chart history (90 days, matching
+                # the future projection window)
+                lookback_ts = now - 90.0 * 86400.0
             else:
                 # No backfill: only catch doses since the last refresh
                 lookback_ts = now - DEFAULT_UPDATE_INTERVAL - 60
@@ -389,8 +389,9 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Persist any past automatic doses that haven't been recorded yet
         await self._persist_auto_doses(config, now)
 
-        # Prune old doses for this entry
-        await self.database.prune_stale_doses(entry_id)
+        # Prune old doses for this entry (keep 90 days when backfill enabled)
+        retention = 90.0 if config.get("backfill_doses", False) else 0.0
+        await self.database.prune_stale_doses(entry_id, retention)
 
         # Get ALL doses from database (manual + persisted automatic, cross-entry)
         all_manual_doses = await self.database.get_all_doses()

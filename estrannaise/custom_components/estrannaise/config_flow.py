@@ -56,19 +56,48 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._data: dict[str, Any] = {}
         self._schedules: list[dict[str, Any]] = []
+        self._setup_mode: str = "manual"
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Step 1: Ester selection."""
-        errors: dict[str, str] = {}
+        """Step 1: Choose setup mode."""
+        if user_input is not None:
+            setup_mode = user_input.get("setup_mode", "manual")
+            self._setup_mode = setup_mode
+            if setup_mode == "guided":
+                return await self.async_step_guided_method()
+            elif setup_mode == "auto":
+                return await self.async_step_ester()
+            else:
+                self._data[CONF_AUTO_REGIMEN] = False
+                return await self.async_step_ester()
 
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("setup_mode", default="manual"): vol.In(
+                        {
+                            "manual": "Manual setup",
+                            "guided": "Guided setup (recommended for beginners)",
+                            "auto": "Auto-generate (beta)",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_ester(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Ester selection (manual and auto paths)."""
         if user_input is not None:
             self._data.update(user_input)
             return await self.async_step_method()
 
         return self.async_show_form(
-            step_id="user",
+            step_id="ester",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_ESTER, default=DEFAULT_ESTER): vol.In(
@@ -76,13 +105,12 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                 }
             ),
-            errors=errors,
         )
 
     async def async_step_method(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Step 2: Method selection (filtered by chosen ester)."""
+        """Method selection (filtered by chosen ester)."""
         errors: dict[str, str] = {}
         ester = self._data.get(CONF_ESTER, DEFAULT_ESTER)
 
@@ -97,7 +125,9 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "invalid_combination"
             else:
                 self._data.update(user_input)
-                return await self.async_step_setup_mode()
+                if self._setup_mode == "auto":
+                    return await self.async_step_auto_target()
+                return await self.async_step_regimen()
 
         # Only show methods that are valid for the selected ester
         available_methods = {
@@ -119,32 +149,6 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
-        )
-
-    async def async_step_setup_mode(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.ConfigFlowResult:
-        """Step 2: Auto-generate or manual regimen setup."""
-        if user_input is not None:
-            setup_mode = user_input.get("setup_mode", "auto")
-            if setup_mode == "auto":
-                return await self.async_step_auto_target()
-            else:
-                self._data[CONF_AUTO_REGIMEN] = False
-                return await self.async_step_regimen()
-
-        return self.async_show_form(
-            step_id="setup_mode",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("setup_mode", default="manual"): vol.In(
-                        {
-                            "manual": "Manual setup (recommended)",
-                            "auto": "Auto-generate",
-                        }
-                    ),
-                }
-            ),
         )
 
     async def async_step_auto_target(
@@ -269,6 +273,367 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"dose_unit": dose_unit},
         )
 
+    # ── Guided beginner setup flow ────────────────────────────────────────
+
+    async def async_step_guided_method(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How do you take estrogen?"""
+        if user_input is not None:
+            choice = user_input["guided_method"]
+            self._data["_guided_method"] = choice
+            if choice == "pills":
+                self._data[CONF_ESTER] = "E"
+                self._data[CONF_METHOD] = "oral"
+                return await self.async_step_guided_pill_dose()
+            elif choice == "patches":
+                self._data[CONF_ESTER] = "E"
+                self._data[CONF_METHOD] = "patch"
+                return await self.async_step_guided_patch_strength()
+            else:  # injections
+                return await self.async_step_guided_injection_ester()
+
+        return self.async_show_form(
+            step_id="guided_method",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("guided_method"): vol.In(
+                        {
+                            "pills": "Pills / tablets",
+                            "patches": "Patches",
+                            "injections": "Injections",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    # ── Pills path ──
+
+    async def async_step_guided_pill_dose(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How many mg per pill?"""
+        if user_input is not None:
+            self._data["_pill_mg"] = user_input["pill_mg"]
+            return await self.async_step_guided_pill_count()
+
+        return self.async_show_form(
+            step_id="guided_pill_dose",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("pill_mg", default=2.0): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.25, max=8)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_pill_count(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How many pills at a time?"""
+        if user_input is not None:
+            count = int(user_input["pill_count"])
+            self._data[CONF_DOSE_MG] = self._data["_pill_mg"] * count
+            return await self.async_step_guided_schedule()
+
+        return self.async_show_form(
+            step_id="guided_pill_count",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("pill_count", default=1): vol.All(
+                        vol.Coerce(int), vol.Range(min=1, max=10)
+                    ),
+                }
+            ),
+        )
+
+    # ── Injections path ──
+
+    async def async_step_guided_injection_ester(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: What type of estrogen do you inject?"""
+        if user_input is not None:
+            self._data[CONF_ESTER] = user_input["injection_ester"]
+            return await self.async_step_guided_injection_route()
+
+        return self.async_show_form(
+            step_id="guided_injection_ester",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("injection_ester", default="EV"): vol.In(
+                        {
+                            "EV": "Estradiol Valerate",
+                            "EC": "Estradiol Cypionate",
+                            "EEn": "Estradiol Enanthate",
+                            "EB": "Estradiol Benzoate",
+                            "EUn": "Estradiol Undecylate",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_injection_route(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: IM or SubQ?"""
+        if user_input is not None:
+            self._data[CONF_METHOD] = user_input["injection_route"]
+            return await self.async_step_guided_injection_strength()
+
+        return self.async_show_form(
+            step_id="guided_injection_route",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("injection_route", default="im"): vol.In(
+                        {
+                            "im": "Intramuscular (IM)",
+                            "subq": "Subcutaneous (SubQ)",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_injection_strength(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: Injection concentration (mg per mL)."""
+        if user_input is not None:
+            self._data["_concentration_mg"] = user_input["concentration_mg"]
+            self._data["_concentration_ml"] = user_input["concentration_ml"]
+            return await self.async_step_guided_injection_volume()
+
+        return self.async_show_form(
+            step_id="guided_injection_strength",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("concentration_mg", default=20.0): vol.All(
+                        vol.Coerce(float), vol.Range(min=1, max=100)
+                    ),
+                    vol.Required("concentration_ml", default=1.0): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.1, max=10)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_injection_volume(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How many mL per injection?"""
+        if user_input is not None:
+            volume = user_input["injection_volume"]
+            conc_mg = self._data["_concentration_mg"]
+            conc_ml = self._data["_concentration_ml"]
+            self._data[CONF_DOSE_MG] = (conc_mg / conc_ml) * volume
+            return await self.async_step_guided_schedule()
+
+        return self.async_show_form(
+            step_id="guided_injection_volume",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("injection_volume", default=0.5): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.05, max=5)
+                    ),
+                }
+            ),
+        )
+
+    # ── Patches path ──
+
+    async def async_step_guided_patch_strength(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: Patch delivery rate."""
+        if user_input is not None:
+            self._data["_patch_strength"] = user_input["patch_strength"]
+            return await self.async_step_guided_patch_count()
+
+        return self.async_show_form(
+            step_id="guided_patch_strength",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("patch_strength", default="0.05"): vol.In(
+                        {
+                            "0.025": "0.025 mg/day (25 mcg/day)",
+                            "0.0375": "0.0375 mg/day (37.5 mcg/day)",
+                            "0.05": "0.05 mg/day (50 mcg/day)",
+                            "0.06": "0.06 mg/day (60 mcg/day)",
+                            "0.075": "0.075 mg/day (75 mcg/day)",
+                            "0.1": "0.1 mg/day (100 mcg/day)",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_patch_count(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How many patches at a time?"""
+        if user_input is not None:
+            count = int(user_input["patch_count"])
+            strength = float(self._data["_patch_strength"])
+            self._data[CONF_DOSE_MG] = strength * count
+            return await self.async_step_guided_patch_schedule()
+
+        return self.async_show_form(
+            step_id="guided_patch_count",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("patch_count", default=1): vol.All(
+                        vol.Coerce(int), vol.Range(min=1, max=6)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_patch_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How often do you change patches?"""
+        if user_input is not None:
+            if user_input["patch_schedule"] == "twice_weekly":
+                self._data[CONF_INTERVAL_DAYS] = 3.5
+            else:
+                self._data[CONF_INTERVAL_DAYS] = 7.0
+            return await self.async_step_guided_dose_time()
+
+        return self.async_show_form(
+            step_id="guided_patch_schedule",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "patch_schedule", default="twice_weekly"
+                    ): vol.In(
+                        {
+                            "twice_weekly": "Twice a week (every 3-4 days)",
+                            "once_weekly": "Once a week (every 7 days)",
+                        }
+                    ),
+                }
+            ),
+        )
+
+    # ── Common ending steps ──
+
+    async def async_step_guided_schedule(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How often do you dose? (pills & injections)"""
+        if user_input is not None:
+            self._data[CONF_INTERVAL_DAYS] = user_input["interval_days"]
+            if self._data[CONF_INTERVAL_DAYS] <= 1.0:
+                # Daily dosing: skip time/offset steps, use defaults
+                self._data[CONF_DOSE_TIME] = DEFAULT_DOSE_TIME
+                self._data[CONF_PHASE_DAYS] = DEFAULT_PHASE_DAYS
+                return await self.async_step_guided_backfill()
+            return await self.async_step_guided_dose_time()
+
+        method = self._data.get(CONF_METHOD, DEFAULT_METHOD)
+        default_interval = 1.0 if method == "oral" else 7.0
+
+        return self.async_show_form(
+            step_id="guided_schedule",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "interval_days", default=default_interval
+                    ): vol.All(
+                        vol.Coerce(float), vol.Range(min=0.5, max=90)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_dose_time(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: What time of day do you dose?"""
+        if user_input is not None:
+            self._data[CONF_DOSE_TIME] = user_input.get(
+                "dose_time", DEFAULT_DOSE_TIME
+            )
+            return await self.async_step_guided_days_until()
+
+        return self.async_show_form(
+            step_id="guided_dose_time",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "dose_time", default=DEFAULT_DOSE_TIME
+                    ): str,
+                }
+            ),
+        )
+
+    async def async_step_guided_days_until(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: How many days until your next dose?"""
+        if user_input is not None:
+            from datetime import datetime, timedelta
+
+            days_until = int(user_input.get("days_until", 0))
+            if days_until > 0:
+                next_date = datetime.now() + timedelta(days=days_until)
+                epoch_day = int(next_date.timestamp() / 86400)
+                phase = float(epoch_day % 28)
+                self._data[CONF_PHASE_DAYS] = phase if phase > 0 else 0.0
+            else:
+                self._data[CONF_PHASE_DAYS] = DEFAULT_PHASE_DAYS
+            return await self.async_step_guided_backfill()
+
+        return self.async_show_form(
+            step_id="guided_days_until",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("days_until", default=0): vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=90)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_guided_backfill(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Guided: Have you been on this schedule for a while?"""
+        if user_input is not None:
+            self._data[CONF_BACKFILL_DOSES] = user_input.get(
+                "been_on_schedule", False
+            )
+            self._data[CONF_MODE] = MODE_AUTOMATIC
+            self._data[CONF_AUTO_REGIMEN] = False
+            self._data[CONF_TARGET_TYPE] = DEFAULT_TARGET_TYPE
+            # Clean up temporary guided flow keys
+            for key in list(self._data.keys()):
+                if key.startswith("_"):
+                    del self._data[key]
+            return await self.async_step_settings()
+
+        guided = self._data.get("_guided_method", "pills")
+        if guided == "pills":
+            action = "taking pills on"
+        elif guided == "patches":
+            action = "wearing patches on"
+        else:
+            action = "injecting on"
+
+        return self.async_show_form(
+            step_id="guided_backfill",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("been_on_schedule", default=True): bool,
+                }
+            ),
+            description_placeholders={"action": action},
+        )
+
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -354,21 +719,23 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             title = f"{ester_name} {dose}mg/{interval}d ({method_name})"
             return self.async_create_entry(title=title, data=self._data)
 
+        schema_fields: dict = {
+            vol.Required(CONF_UNITS, default=DEFAULT_UNITS): vol.In(
+                {"pg/mL": "pg/mL", "pmol/L": "pmol/L"}
+            ),
+            vol.Required(
+                CONF_ENABLE_CALENDAR, default=DEFAULT_ENABLE_CALENDAR
+            ): bool,
+        }
+        # Only show backfill if not already answered (e.g. guided flow)
+        if CONF_BACKFILL_DOSES not in self._data:
+            schema_fields[vol.Required(
+                CONF_BACKFILL_DOSES, default=DEFAULT_BACKFILL_DOSES
+            )] = bool
+
         return self.async_show_form(
             step_id="settings",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_UNITS, default=DEFAULT_UNITS): vol.In(
-                        {"pg/mL": "pg/mL", "pmol/L": "pmol/L"}
-                    ),
-                    vol.Required(
-                        CONF_ENABLE_CALENDAR, default=DEFAULT_ENABLE_CALENDAR
-                    ): bool,
-                    vol.Required(
-                        CONF_BACKFILL_DOSES, default=DEFAULT_BACKFILL_DOSES
-                    ): bool,
-                }
-            ),
+            data_schema=vol.Schema(schema_fields),
         )
 
     async def async_step_import(
