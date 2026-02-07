@@ -51,8 +51,8 @@ Oral micronized estradiol is modeled using the same three-compartment framework 
 type: custom:estrannaise-card
 entity: sensor.estrannaise_estradiol_enanthate
 title: Estradiol Level
-hours_to_show: 720
-hours_to_predict: 168
+days_to_show: 30
+days_to_predict: 7
 show_target_range: true
 show_danger_threshold: false
 show_menstrual_cycle: false
@@ -62,7 +62,7 @@ line_color: '#E91E63'
 Card editor options:
 - **Entity**: The Estrannaise sensor entity
 - **Title / Icon**: Customize the card header
-- **Hours to show / predict**: How far back and forward to render
+- **Days to show / predict**: How far back and forward to render
 - **Show target range**: Blue band at 100-200 pg/mL
 - **Show danger threshold**: Red band above 500 pg/mL
 - **Show menstrual cycle overlay**: Reference menstrual cycle E2 curve (p5-p95 band)

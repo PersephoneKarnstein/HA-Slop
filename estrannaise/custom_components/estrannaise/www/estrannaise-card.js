@@ -194,8 +194,8 @@ if (!customElements.get('estrannaise-card')) {
         entity: 'sensor.estrannaise_my_hrt',
         title: 'Estradiol Level',
         icon: 'mdi:chart-bell-curve-cumulative',
-        hours_to_show: 720,
-        hours_to_predict: 168,
+        days_to_show: 30,
+        days_to_predict: 7,
         show_target_range: true,
         show_menstrual_cycle: false,
       };
@@ -211,8 +211,8 @@ if (!customElements.get('estrannaise-card')) {
     setConfig(config) {
       if (!config.entity) throw new Error('Please define an entity');
       const base = {
-        hours_to_show: 720,
-        hours_to_predict: 168,
+        days_to_show: 30,
+        days_to_predict: 7,
         show_target_range: true,
         show_danger_threshold: false,
         show_menstrual_cycle: false,
@@ -224,6 +224,13 @@ if (!customElements.get('estrannaise-card')) {
         test_marker_color: '#F44336',
         ...config,
       };
+      // Backward compat: convert legacy hours_* to days_*
+      if ('hours_to_show' in config && !('days_to_show' in config)) {
+        base.days_to_show = Math.round(config.hours_to_show / 24);
+      }
+      if ('hours_to_predict' in config && !('days_to_predict' in config)) {
+        base.days_to_predict = Math.round(config.hours_to_predict / 24);
+      }
       // Default prediction_color to line_color if not explicitly set
       if (!config.prediction_color) {
         base.prediction_color = base.line_color;
@@ -438,10 +445,10 @@ if (!customElements.get('estrannaise-card')) {
       const cf = units === 'pmol/L' ? 3.6713 : 1.0;
 
       const now = Date.now() / 1000;
-      const hoursBack = this.config.hours_to_show;
-      const hoursForward = this.config.hours_to_predict;
-      const tMin = now - hoursBack * 3600;
-      const tMax = now + hoursForward * 3600;
+      const daysBack = this.config.days_to_show;
+      const daysForward = this.config.days_to_predict;
+      const tMin = now - daysBack * 86400;
+      const tMax = now + daysForward * 86400;
 
       // ── Collect all dose events ────────────────────────────────────────
       let allDoses = [];
@@ -1094,7 +1101,24 @@ if (!customElements.get('estrannaise-card-editor')) {
 
     setConfig(config) {
       this.config = { ...config };
-      this._render();
+      // Backward compat: convert legacy hours_* to days_*
+      if ('hours_to_show' in config && !('days_to_show' in config)) {
+        this.config.days_to_show = Math.round(config.hours_to_show / 24);
+      }
+      if ('hours_to_predict' in config && !('days_to_predict' in config)) {
+        this.config.days_to_predict = Math.round(config.hours_to_predict / 24);
+      }
+      // Only rebuild the form on initial load; skip when the change
+      // originated from the form itself (avoids stealing input focus).
+      if (this._ignoreNextConfig) {
+        this._ignoreNextConfig = false;
+        return;
+      }
+      if (!this._form) {
+        this._buildForm();
+      } else {
+        this._form.data = this._getFormData();
+      }
     }
 
     set hass(hass) {
@@ -1102,30 +1126,34 @@ if (!customElements.get('estrannaise-card-editor')) {
       if (this._form) this._form.hass = hass;
     }
 
-    _render() {
-      if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-      this.shadowRoot.innerHTML = '';
-
-      const form = document.createElement('ha-form');
-      form.hass = this._hass;
-      form.data = {
+    _getFormData() {
+      return {
         entity: this.config.entity || '',
         title: this.config.title || 'Estradiol Level',
         icon: this.config.icon || 'mdi:chart-bell-curve-cumulative',
-        hours_to_show: this.config.hours_to_show || 720,
-        hours_to_predict: this.config.hours_to_predict || 168,
+        days_to_show: this.config.days_to_show || 30,
+        days_to_predict: this.config.days_to_predict || 7,
         show_target_range: this.config.show_target_range !== false,
         show_danger_threshold: !!this.config.show_danger_threshold,
         show_menstrual_cycle: !!this.config.show_menstrual_cycle,
         line_color: hexToRgb(this.config.line_color || '#E91E63'),
         prediction_color: hexToRgb(this.config.prediction_color || this.config.line_color || '#E91E63'),
       };
+    }
+
+    _buildForm() {
+      if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+      this.shadowRoot.innerHTML = '';
+
+      const form = document.createElement('ha-form');
+      form.hass = this._hass;
+      form.data = this._getFormData();
       form.schema = [
         { name: 'entity', selector: { entity: { domain: 'sensor' } } },
         { name: 'title', label: 'Title', selector: { text: {} } },
         { name: 'icon', label: 'Icon', selector: { icon: {} } },
-        { name: 'hours_to_show', label: 'Hours to show (past)', selector: { number: { min: 1, max: 8760, mode: 'box' } } },
-        { name: 'hours_to_predict', label: 'Hours to predict', selector: { number: { min: 1, max: 8760, mode: 'box' } } },
+        { name: 'days_to_show', label: 'Days to show (past)', selector: { number: { min: 1, max: 365, mode: 'box' } } },
+        { name: 'days_to_predict', label: 'Days to predict', selector: { number: { min: 1, max: 365, mode: 'box' } } },
         { name: 'show_target_range', label: 'Show target range', selector: { boolean: {} } },
         { name: 'show_danger_threshold', label: 'Show danger threshold (>500 pg/mL)', selector: { boolean: {} } },
         { name: 'show_menstrual_cycle', label: 'Show menstrual cycle overlay', selector: { boolean: {} } },
@@ -1137,6 +1165,9 @@ if (!customElements.get('estrannaise-card-editor')) {
       form.addEventListener('value-changed', (ev) => {
         const data = ev.detail.value;
         const newConfig = { ...this.config };
+        // Remove legacy hours_* keys
+        delete newConfig.hours_to_show;
+        delete newConfig.hours_to_predict;
         for (const [key, val] of Object.entries(data)) {
           if (key === 'line_color' || key === 'prediction_color') {
             newConfig[key] = rgbToHex(val);
@@ -1144,6 +1175,8 @@ if (!customElements.get('estrannaise-card-editor')) {
             newConfig[key] = val;
           }
         }
+        // Suppress the setConfig echo so the form keeps focus
+        this._ignoreNextConfig = true;
         this.config = newConfig;
         const event = new Event('config-changed', { bubbles: true, composed: true });
         event.detail = { config: this.config };
