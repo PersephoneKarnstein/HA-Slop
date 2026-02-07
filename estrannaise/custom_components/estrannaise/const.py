@@ -317,6 +317,8 @@ def terminal_elimination_days(model: str, nb_half_lives: float = 5.0) -> float:
     if not params:
         return 30.0  # fallback
     _d, k1, k2, k3 = params
+    if k1 <= 0 or k2 <= 0 or k3 <= 0:
+        return 30.0  # fallback for degenerate parameters
     return nb_half_lives * math.log(2) * (1.0 / k1 + 1.0 / k2 + 1.0 / k3)
 
 

@@ -140,6 +140,10 @@ class CubicSpline {
     const n = xs.length;
     this.xs = xs;
     this.ys = ys;
+    if (n < 2) {
+      this.b = []; this.c = []; this.d = [];
+      return;
+    }
     const h = [], alpha = [], l = [], mu = [], z = [];
     const c = new Array(n).fill(0);
     const b = new Array(n).fill(0);
@@ -165,6 +169,7 @@ class CubicSpline {
 
   at(x) {
     const xs = this.xs, ys = this.ys;
+    if (xs.length < 2) return ys.length > 0 ? ys[0] : 0;
     let i = xs.length - 2;
     for (let j = 0; j < xs.length - 1; j++) {
       if (x < xs[j + 1]) { i = j; break; }

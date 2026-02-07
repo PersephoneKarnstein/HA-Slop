@@ -140,6 +140,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         method = config["method"]
         dose_mg = config["dose_mg"]
         interval_days = config["interval_days"]
+        if interval_days <= 0:
+            return []
 
         # Align to time-of-day
         dose_time = config.get("dose_time", "08:00")
@@ -149,6 +151,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             minute = int(parts[1]) if len(parts) > 1 else 0
         except (ValueError, IndexError):
             hour, minute = 8, 0
+        hour = max(0, min(23, hour))
+        minute = max(0, min(59, minute))
 
         # If auto_regimen is enabled, use suggested regimen values
         cycle_fit = None
@@ -174,6 +178,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for sch in cycle_fit["schedules"]:
                 sch_dose = sch["dose_mg"]
                 sch_interval = sch["interval_days"]
+                if sch_interval <= 0:
+                    continue
                 sch_phase = int(sch["phase_days"])
                 sch_model = sch["model_key"]
                 sch_interval_sec = sch_interval * 86400.0
@@ -255,7 +261,7 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     t += interval_sec
 
-        return doses
+        return doses[:1000]
 
     async def _persist_auto_doses(
         self, config: dict[str, Any], now: float
@@ -284,6 +290,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             minute = int(parts[1]) if len(parts) > 1 else 0
         except (ValueError, IndexError):
             hour, minute = 8, 0
+        hour = max(0, min(23, hour))
+        minute = max(0, min(59, minute))
         tod_sec = hour * 3600 + minute * 60
 
         # Resolve schedule(s)
@@ -328,6 +336,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
 
             interval_sec = sch_interval * 86400.0
+            if interval_sec <= 0:
+                continue
 
             if config.get("backfill_doses", False):
                 # Backfill: go back as far as doses are PK-relevant
@@ -424,21 +434,18 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 cycle_fit_regimen = suggested_regimen
 
         # Blood test baseline (zero-state handling)
-        # When predicted E2 is 0 at all test times, multiplicative scaling
-        # cannot work. Use the most recent blood test as a baseline anchor
-        # that decays forward using the slowest elimination constant.
+        # When predicted E2 is negligible (<1 pg/mL) at all test times,
+        # multiplicative scaling cannot work. Use the most recent blood test
+        # as a baseline anchor that decays forward using the slowest
+        # elimination constant.
         baseline_e2 = 0.0
         baseline_test_ts = 0.0
-        if (
-            all_blood_tests
-            and scaling_factor == 1.0
-            and scaling_variance == 0.0
-        ):
-            all_zero = all(
-                compute_e2_at_time(bt["timestamp"], combined_doses) <= 0
+        if all_blood_tests:
+            all_negligible = all(
+                compute_e2_at_time(bt["timestamp"], combined_doses) < 1.0
                 for bt in all_blood_tests
             )
-            if all_zero:
+            if all_negligible:
                 latest = max(all_blood_tests, key=lambda t: t["timestamp"])
                 test_level = latest["level_pg_ml"]
                 age_days = (now - latest["timestamp"]) / 86400.0
@@ -454,9 +461,11 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         k3 = params[3]
                         baseline_e2 = test_level * math.exp(-k3 * age_days)
 
-        # Include baseline in displayed E2 value
+        # Include baseline in displayed E2 value and reset bogus scaling
         if baseline_e2 > 0:
-            current_e2 += baseline_e2 * cf
+            scaling_factor = 1.0
+            scaling_variance = 0.0
+            current_e2 = baseline_e2 * cf
 
         return {
             "doses": all_manual_doses,

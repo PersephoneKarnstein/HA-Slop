@@ -30,7 +30,9 @@ SERVICE_LOG_DOSE_SCHEMA = vol.Schema(
         vol.Required("entity_id"): str,
         vol.Required("model"): vol.In(_VALID_SERVICE_MODELS),
         vol.Required("dose_mg"): vol.All(vol.Coerce(float), vol.Range(min=0.01)),
-        vol.Optional("timestamp"): vol.Coerce(float),
+        vol.Optional("timestamp"): vol.All(
+            vol.Coerce(float), vol.Range(min=1577836800, max=4102444800)
+        ),
     }
 )
 
@@ -38,7 +40,9 @@ SERVICE_LOG_BLOOD_TEST_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): str,
         vol.Required("level_pg_ml"): vol.All(vol.Coerce(float), vol.Range(min=0)),
-        vol.Optional("timestamp"): vol.Coerce(float),
+        vol.Optional("timestamp"): vol.All(
+            vol.Coerce(float), vol.Range(min=1577836800, max=4102444800)
+        ),
         vol.Optional("notes"): str,
     }
 )
@@ -162,8 +166,7 @@ def _register_services(hass: HomeAssistant) -> None:
         if model == "patch":
             cfg = coord._get_config()
             resolved = resolve_model_key("E", "patch", cfg["interval_days"])
-            if resolved:
-                model = resolved
+            model = resolved or "patch tw"
 
         await coord.database.add_dose(
             config_entry_id=entry_id,

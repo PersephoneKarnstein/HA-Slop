@@ -140,6 +140,8 @@ class EstrannaisCalendar(
                 minute = int(parts[1]) if len(parts) > 1 else 0
             except (ValueError, IndexError):
                 hour, minute = 8, 0
+            hour = max(0, min(23, hour))
+            minute = max(0, min(59, minute))
 
             now = datetime.now(timezone.utc)
 
@@ -166,6 +168,8 @@ class EstrannaisCalendar(
             for sch in schedules:
                 dose_mg = sch["dose_mg"]
                 interval = timedelta(days=sch["interval_days"])
+                if interval.total_seconds() <= 0:
+                    continue
                 today_dose = now.replace(
                     hour=hour, minute=minute, second=0, microsecond=0
                 )
@@ -186,8 +190,6 @@ class EstrannaisCalendar(
             if (prev and prev["ester"] == rd["ester"]
                     and abs((rd["dt"] - prev["dt"]).total_seconds()) < 3600):
                 prev["dose_mg"] += rd["dose_mg"]
-                prev["label"] = f"{prev['dose_mg']}{prev['label'].split(prev['label'].split('mg')[0] + 'mg')[1] if 'mg' in prev['label'] else prev['label']}"
-                # Simpler: just rebuild label from merged data
                 ester_name = ESTERS.get(prev["ester"], prev["ester"])
                 prev["label"] = f"{prev['dose_mg']}mg {ester_name}"
                 prev["desc"] = f"{prev['desc']}\n+ {rd['desc']}"

@@ -83,7 +83,8 @@ class EstrannaisDatabase:
         """Record a dose. Returns the new row ID."""
         now = time.time()
         ts = timestamp if timestamp is not None else now
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         async with self._write_lock:
             cursor = await self._db.execute(
                 "INSERT INTO doses (config_entry_id, timestamp, model, dose_mg, source, created_at) "
@@ -99,7 +100,8 @@ class EstrannaisDatabase:
         since_timestamp: float | None = None,
     ) -> list[dict[str, Any]]:
         """Get dose records for a config entry, optionally filtered by time."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         if since_timestamp is not None:
             cursor = await self._db.execute(
                 "SELECT id, config_entry_id, timestamp, model, dose_mg, source "
@@ -122,7 +124,8 @@ class EstrannaisDatabase:
         since_timestamp: float | None = None,
     ) -> list[dict[str, Any]]:
         """Get dose records across all config entries."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         if since_timestamp is not None:
             cursor = await self._db.execute(
                 "SELECT id, config_entry_id, timestamp, model, dose_mg, source "
@@ -140,7 +143,8 @@ class EstrannaisDatabase:
 
     async def delete_dose(self, config_entry_id: str, dose_id: int) -> bool:
         """Delete a dose by ID. Returns True if a row was deleted."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         async with self._write_lock:
             cursor = await self._db.execute(
                 "DELETE FROM doses WHERE id = ? AND config_entry_id = ?",
@@ -161,7 +165,8 @@ class EstrannaisDatabase:
         """Record a blood test result. Returns the new row ID."""
         now = time.time()
         ts = timestamp if timestamp is not None else now
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         async with self._write_lock:
             cursor = await self._db.execute(
                 "INSERT INTO blood_tests (config_entry_id, timestamp, level_pg_ml, notes, created_at) "
@@ -175,7 +180,8 @@ class EstrannaisDatabase:
         self, config_entry_id: str
     ) -> list[dict[str, Any]]:
         """Get all blood test records for a config entry."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         cursor = await self._db.execute(
             "SELECT id, config_entry_id, timestamp, level_pg_ml, notes "
             "FROM blood_tests WHERE config_entry_id = ? "
@@ -187,7 +193,8 @@ class EstrannaisDatabase:
 
     async def get_all_blood_tests(self) -> list[dict[str, Any]]:
         """Get all blood test records across all config entries."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         cursor = await self._db.execute(
             "SELECT id, config_entry_id, timestamp, level_pg_ml, notes "
             "FROM blood_tests ORDER BY timestamp ASC",
@@ -199,7 +206,8 @@ class EstrannaisDatabase:
         self, config_entry_id: str, test_id: int
     ) -> bool:
         """Delete a blood test by ID. Returns True if a row was deleted."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         async with self._write_lock:
             cursor = await self._db.execute(
                 "DELETE FROM blood_tests WHERE id = ? AND config_entry_id = ?",
@@ -212,7 +220,8 @@ class EstrannaisDatabase:
 
     async def clear_all_data(self) -> None:
         """Delete all doses and blood tests from the database."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         async with self._write_lock:
             await self._db.execute("DELETE FROM doses")
             await self._db.execute("DELETE FROM blood_tests")
@@ -251,7 +260,7 @@ class EstrannaisDatabase:
             predicted = compute_e2_at_time(
                 test["timestamp"], all_doses, scaling_factor=1.0
             )
-            if predicted <= 0:
+            if predicted < 1.0:
                 continue
 
             ratio = test["level_pg_ml"] / predicted
@@ -281,7 +290,8 @@ class EstrannaisDatabase:
         self, config_entry_id: str
     ) -> set[float]:
         """Return timestamps of all automatic doses for an entry."""
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         cursor = await self._db.execute(
             "SELECT timestamp FROM doses "
             "WHERE config_entry_id = ? AND source = 'automatic' "
@@ -298,7 +308,8 @@ class EstrannaisDatabase:
 
         Returns the number of rows deleted.
         """
-        assert self._db is not None
+        if self._db is None:
+            raise RuntimeError("Estrannaise database is not initialized")
         now = time.time()
         total_deleted = 0
 
