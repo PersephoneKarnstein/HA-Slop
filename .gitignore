@@ -1,3 +1,18 @@
 CLAUDE.md
 .claude
 
+# OS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python bytecode (HA compiles at runtime)
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
