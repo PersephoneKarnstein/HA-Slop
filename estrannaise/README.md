@@ -130,7 +130,7 @@ When enabled, scheduled doses appear as events on your Home Assistant calendar. 
 
 ## How the PK model works
 
-The integration uses a three-compartment pharmacokinetic model from [estrannaise.js](https://github.com/WHSAH/estrannaise.js), with parameters estimated via Bayesian inference ([Esterlabe.jl](https://github.com/WHSAH/estrannaise.js)). For each dose, the blood E2 contribution at time $t$ (days after dosing) is:
+The integration uses a three-compartment pharmacokinetic model from [estrannaise.js](https://github.com/WHSAH/estrannaise.js), with parameters estimated via MAP estimation and MCMC in Esterlabe.jl (unreleased). For each dose, the blood E2 contribution at time $t$ (days after dosing) is:
 
 $$E_2(t) = \frac{d \, k_2 \, k_3}{(k_1 - k_2)(k_1 - k_3)} \left( k_1 \, e^{-k_1 t} \;-\; k_2 \, e^{-k_2 t} \;-\; k_3 \, e^{-k_3 t} \right)$$
 
