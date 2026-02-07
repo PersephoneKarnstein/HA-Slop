@@ -366,7 +366,7 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required("injection_ester", default="EV"): vol.In(
                         {
                             "EV": "Estradiol Valerate",
-                            "EC": "Estradiol Cypionate",
+                            "EC": "Estradiol Cypionate (Depo-Estradiol)",
                             "EEn": "Estradiol Enanthate",
                             "EB": "Estradiol Benzoate",
                             "EUn": "Estradiol Undecylate",
@@ -411,7 +411,7 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="guided_injection_strength",
             data_schema=vol.Schema(
                 {
-                    vol.Required("concentration_mg", default=20.0): vol.All(
+                    vol.Required("concentration_mg", default=5.0): vol.All(
                         vol.Coerce(float), vol.Range(min=1, max=100)
                     ),
                     vol.Required("concentration_ml", default=1.0): vol.All(
