@@ -1,0 +1,78 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Estrannaise HRT Monitor",
+        "description": "Set up estrogen level monitoring.\n\nNote: This integration provides pharmacokinetic APPROXIMATIONS of blood serum levels based on population models. Individual results may vary significantly. Always confirm with blood tests.",
+        "data": {
+          "ester": "Estradiol ester",
+          "method": "Dosing method"
+        }
+      },
+      "setup_mode": {
+        "title": "Regimen Setup",
+        "description": "Choose how to configure your dosing regimen.",
+        "data": {
+          "setup_mode": "Configuration method"
+        }
+      },
+      "auto_target": {
+        "title": "Target Range",
+        "description": "Choose the target estradiol range. The integration will auto-compute dose and interval to approximate this target.",
+        "data": {
+          "target_type": "Target range"
+        }
+      },
+      "confirm_schedules": {
+        "title": "Confirm Auto-Generated Schedules",
+        "description": "The following {count} dosing schedules will be created for {ester} ({method}): {schedules}. Each schedule will appear as a separate entity that you can adjust individually."
+      },
+      "regimen": {
+        "title": "Dosing Regimen",
+        "description": "Configure your dosing schedule. Dose amount is in {dose_unit}.",
+        "data": {
+          "dose_mg": "Dose amount ({dose_unit})",
+          "interval_days": "Dosing interval (days)",
+          "mode": "Tracking mode",
+          "dose_time": "Dose time of day (HH:MM)",
+          "phase_days": "Cycle day offset (0-27)"
+        }
+      },
+      "settings": {
+        "title": "Display & Integration Settings",
+        "data": {
+          "units": "Measurement units",
+          "enable_calendar": "Add dose schedule to HA calendar"
+        }
+      }
+    },
+    "error": {
+      "unknown": "An unexpected error occurred.",
+      "invalid_combination": "This ester/method combination is not available.",
+      "not_yet_supported": "This combination is not yet supported."
+    },
+    "abort": {
+      "already_configured": "This regimen is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Estrannaise Options",
+        "description": "Estimated levels are pharmacokinetic approximations, not actual blood serum measurements.",
+        "data": {
+          "ester": "Estradiol ester",
+          "method": "Dosing method",
+          "dose_mg": "Dose amount ({dose_unit})",
+          "interval_days": "Dosing interval (days)",
+          "mode": "Tracking mode",
+          "dose_time": "Dose time of day (HH:MM)",
+          "phase_days": "Cycle day offset (0-27)",
+          "units": "Measurement units",
+          "enable_calendar": "Add dose schedule to HA calendar",
+          "reset_data": "Reset all saved data (doses and blood tests)"
+        }
+      }
+    }
+  }
+}

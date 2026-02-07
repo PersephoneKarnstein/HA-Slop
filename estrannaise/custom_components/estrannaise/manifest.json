@@ -1,0 +1,12 @@
+{
+  "domain": "estrannaise",
+  "name": "Estrannaise HRT Monitor",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "after_dependencies": ["frontend"],
+  "documentation": "https://github.com/WHSAH/estrannaise.js",
+  "iot_class": "local_push",
+  "requirements": ["aiosqlite==0.20.0"],
+  "version": "1.0.0"
+}
