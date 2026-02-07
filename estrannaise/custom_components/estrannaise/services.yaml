@@ -23,6 +23,7 @@ log_dose:
             - "EC im"
             - "EUn im"
             - "EUn casubq"
+            - "E oral"
             - "patch"
     dose_mg:
       name: Dose amount

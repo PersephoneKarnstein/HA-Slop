@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import (
     CONF_AUTO_REGIMEN,
+    CONF_BACKFILL_DOSES,
     CONF_DOSE_MG,
     CONF_DOSE_TIME,
     CONF_ENABLE_CALENDAR,
@@ -23,6 +24,7 @@ from .const import (
     CONF_TARGET_TYPE,
     CONF_UNITS,
     DEFAULT_AUTO_REGIMEN,
+    DEFAULT_BACKFILL_DOSES,
     DEFAULT_DOSE_MG,
     DEFAULT_DOSE_TIME,
     DEFAULT_ENABLE_CALENDAR,
@@ -58,11 +60,33 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Step 1: Ester and method selection."""
+        """Step 1: Ester selection."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            ester = user_input.get(CONF_ESTER, DEFAULT_ESTER)
+            self._data.update(user_input)
+            return await self.async_step_method()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ESTER, default=DEFAULT_ESTER): vol.In(
+                        ESTERS
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_method(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Step 2: Method selection (filtered by chosen ester)."""
+        errors: dict[str, str] = {}
+        ester = self._data.get(CONF_ESTER, DEFAULT_ESTER)
+
+        if user_input is not None:
             method = user_input.get(CONF_METHOD, DEFAULT_METHOD)
 
             if not is_combination_supported(ester, method):
@@ -75,16 +99,23 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._data.update(user_input)
                 return await self.async_step_setup_mode()
 
+        # Only show methods that are valid for the selected ester
+        available_methods = {
+            k: v for k, v in METHODS.items()
+            if is_combination_supported(ester, k)
+        }
+        default_method = (
+            DEFAULT_METHOD if DEFAULT_METHOD in available_methods
+            else next(iter(available_methods))
+        )
+
         return self.async_show_form(
-            step_id="user",
+            step_id="method",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_ESTER, default=DEFAULT_ESTER): vol.In(
-                        ESTERS
-                    ),
-                    vol.Required(CONF_METHOD, default=DEFAULT_METHOD): vol.In(
-                        METHODS
-                    ),
+                    vol.Required(
+                        CONF_METHOD, default=default_method
+                    ): vol.In(available_methods),
                 }
             ),
             errors=errors,
@@ -328,6 +359,9 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_ENABLE_CALENDAR, default=DEFAULT_ENABLE_CALENDAR
                     ): bool,
+                    vol.Required(
+                        CONF_BACKFILL_DOSES, default=DEFAULT_BACKFILL_DOSES
+                    ): bool,
                 }
             ),
         )
@@ -375,7 +409,9 @@ class EstrannaisOptionsFlow(config_entries.OptionsFlow):
 
             if not is_combination_supported(ester, method):
                 from .const import ESTER_METHOD_TO_MODEL
-                if (ester, method) in ESTER_METHOD_TO_MODEL:
+                if method == "oral" and ester != "E":
+                    errors["base"] = "oral_estradiol_only"
+                elif (ester, method) in ESTER_METHOD_TO_MODEL:
                     errors["base"] = "not_yet_supported"
                 else:
                     errors["base"] = "invalid_combination"
@@ -403,6 +439,13 @@ class EstrannaisOptionsFlow(config_entries.OptionsFlow):
         method = data.get(CONF_METHOD, DEFAULT_METHOD)
         dose_unit = get_dose_units(method)
 
+        # Only show methods valid for the current ester
+        current_ester = data.get(CONF_ESTER, DEFAULT_ESTER)
+        available_methods = {
+            k: v for k, v in METHODS.items()
+            if is_combination_supported(current_ester, k)
+        }
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -414,7 +457,7 @@ class EstrannaisOptionsFlow(config_entries.OptionsFlow):
                     vol.Required(
                         CONF_METHOD,
                         default=data.get(CONF_METHOD, DEFAULT_METHOD),
-                    ): vol.In(METHODS),
+                    ): vol.In(available_methods),
                     vol.Required(
                         CONF_DOSE_MG,
                         default=data.get(CONF_DOSE_MG, DEFAULT_DOSE_MG),
@@ -450,6 +493,10 @@ class EstrannaisOptionsFlow(config_entries.OptionsFlow):
                     vol.Required(
                         CONF_ENABLE_CALENDAR,
                         default=data.get(CONF_ENABLE_CALENDAR, DEFAULT_ENABLE_CALENDAR),
+                    ): bool,
+                    vol.Required(
+                        CONF_BACKFILL_DOSES,
+                        default=data.get(CONF_BACKFILL_DOSES, DEFAULT_BACKFILL_DOSES),
                     ): bool,
                 }
             ),

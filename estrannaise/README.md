@@ -14,14 +14,16 @@ Multiple dosing regimens can be configured as separate integration entries and t
 
 | Ester | Methods |
 |---|---|
-| Estradiol Benzoate | Intramuscular |
-| Estradiol Valerate | Intramuscular |
-| Estradiol Enanthate | Intramuscular |
-| Estradiol Cypionate | Intramuscular |
+| Estradiol Benzoate | Intramuscular, Subcutaneous |
+| Estradiol Valerate | Intramuscular, Subcutaneous |
+| Estradiol Enanthate | Intramuscular, Subcutaneous |
+| Estradiol Cypionate | Intramuscular, Subcutaneous |
 | Estradiol Undecylate | Intramuscular, Subcutaneous |
-| Estradiol (base) | Transdermal Patch |
+| Estradiol (base) | Transdermal Patch, Oral |
 
-Oral and sublingual estradiol are listed but not yet supported.
+Subcutaneous injections for EB, EV, EEn, and EC use the same PK model as intramuscular, as published studies show virtually identical pharmacokinetics between the two routes for oil-based depot injections. Estradiol Undecylate subcutaneous has its own community-derived model parameters.
+
+Oral micronized estradiol is modeled using the same three-compartment framework with parameters calibrated to match published clinical data (Kuhnz 1993, Femtrace FDA review). The absorption rate constant is set very large (k1=100 day⁻¹) so the model effectively reduces to a Bateman (1-compartment absorption-elimination) curve. Oral dosing is only available for plain Estradiol, not esterified forms.
 
 ## Installation
 
@@ -32,7 +34,7 @@ Oral and sublingual estradiol are listed but not yet supported.
 3. Go to **Settings > Devices & Services > Add Integration** and search for **Estrannaise HRT Monitor**.
 
 4. Follow the config flow to set up your dosing regimen:
-   - **Ester and method** (e.g., Estradiol Enanthate, Intramuscular)
+   - **Ester** (e.g., Estradiol Enanthate) then **method** (only methods valid for the chosen ester are shown)
    - **Setup mode**: Manual (enter dose/interval yourself) or Auto-generate (targets a trough of ~200 pg/mL, or approximates a menstrual cycle)
    - **Dose and interval** (manual mode)
    - **Tracking mode**: Manual (log each dose via button), Automatic (recurring schedule), or Both
@@ -81,7 +83,11 @@ type: custom:estrannaise-dose-button
 entity: sensor.estrannaise_estradiol_enanthate
 ```
 
-Logs a dose at the current time using the configured ester, method, and dose amount. Shows "Automatic dosing enabled" if tracking mode is set to Automatic.
+Opens a dialog to select the ester and dose amount before logging. The dropdown is populated from all configured regimens. Optional card config overrides:
+- **model**: Default ester pre-selected in the dialog (e.g., `EEn im`, `E oral`)
+- **dose_mg**: Default dose amount
+
+Shows "Automatic dosing enabled" if tracking mode is set to Automatic.
 
 ### Log Blood Test button
 
@@ -135,4 +141,5 @@ All data stays local. The SQLite database is stored at `<ha_config>/estrannaise.
 ## Credits
 
 - PK model and parameters: [estrannaise.js](https://github.com/WHSAH/estrannaise.js) by WHSAH
+- Monotherapy dose guidelines: [A Practical Guide To Feminizing Hrt](https://pghrt.diy/) by Katie Tightpussy
 - Charting: [Plotly.js](https://plotly.com/javascript/) (bundled)

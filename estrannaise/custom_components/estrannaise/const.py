@@ -21,6 +21,7 @@ CONF_DOSE_TIME = "dose_time"
 CONF_AUTO_REGIMEN = "auto_regimen"
 CONF_TARGET_TYPE = "target_type"
 CONF_PHASE_DAYS = "phase_days"
+CONF_BACKFILL_DOSES = "backfill_doses"
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ DEFAULT_DOSE_TIME = "08:00"
 DEFAULT_AUTO_REGIMEN = False
 DEFAULT_TARGET_TYPE = "target_range"
 DEFAULT_PHASE_DAYS = 0.0
+DEFAULT_BACKFILL_DOSES = False
 DEFAULT_UPDATE_INTERVAL = 300  # 5 minutes
 
 # ── Dosing modes ─────────────────────────────────────────────────────────────
@@ -94,10 +96,9 @@ ESTERS: dict[str, str] = {
 
 METHODS: dict[str, str] = {
     "im": "Intramuscular",
-    "subq": "Subcutaneous (castor oil)",
+    "subq": "Subcutaneous",
     "patch": "Transdermal Patch",
-    "oral": "Oral",
-    "sublingual": "Sublingual",
+    "oral": "Oral (micronized Estradiol)",
 }
 
 # ── Ester + method → internal PK model key ───────────────────────────────────
@@ -108,10 +109,17 @@ ESTER_METHOD_TO_MODEL: dict[tuple[str, str], str] = {
     ("EEn", "im"): "EEn im",
     ("EC", "im"): "EC im",
     ("EUn", "im"): "EUn im",
+    # SubQ maps to IM params for most esters (research shows nearly identical PK);
+    # EUn SubQ has its own community-derived model
+    ("EB", "subq"): "EB im",
+    ("EV", "subq"): "EV im",
+    ("EEn", "subq"): "EEn im",
+    ("EC", "subq"): "EC im",
     ("EUn", "subq"): "EUn casubq",
     ("E", "patch"): "patch",
-    ("E", "oral"): "oral",
-    ("E", "sublingual"): "sublingual",
+    # Oral micronized estradiol — uses 3-compartment model with k1 very large
+    # to approximate the Bateman (1-compartment absorption-elimination) curve
+    ("E", "oral"): "E oral",
 }
 
 # ── PK Parameters [d, k1, k2, k3] ───────────────────────────────────────────
@@ -127,6 +135,9 @@ PK_PARAMETERS: dict[str, list[float]] = {
     "EUn casubq": [16.15, 0.046, 0.022, 0.101],
     "patch tw": [16.792, 0.283, 5.592, 4.3],
     "patch ow": [59.481, 0.107, 7.842, 5.193],
+    # Oral micronized estradiol: k1=100 (instant pass-through), k2=8.88 (absorption),
+    # k3=1.032 (apparent elimination t1/2≈16h). Calibrated to Cavg≈50 pg/mL per mg/day.
+    "E oral": [51.5, 100.0, 8.88, 1.032],
 }
 
 # Patch wear durations (days)
@@ -155,7 +166,11 @@ SUGGESTED_INTERVALS: dict[str, list[float]] = {
     "EUn casubq": [14.0, 28.0],
     "patch tw": [3.5],
     "patch ow": [7.0],
+    "E oral": [1.0],
 }
+
+# SubQ esters (except EUn) map to IM model keys, so SUGGESTED_INTERVALS
+# is looked up via the resolved model key (e.g., "EV im" for EV subq).
 
 # Target trough levels (pg/mL) for auto-regimen
 TARGET_TROUGH: dict[str, float] = {

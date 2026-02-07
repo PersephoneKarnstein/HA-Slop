@@ -83,7 +83,7 @@ def _get_coordinator(
 
 async def _refresh_all_coordinators(hass: HomeAssistant) -> None:
     """Refresh all estrannaise coordinators after a data change."""
-    for key, val in hass.data.get(DOMAIN, {}).items():
+    for key, val in list(hass.data.get(DOMAIN, {}).items()):
         if isinstance(val, EstrannaisCoordinator):
             await val.async_request_refresh()
 
@@ -141,6 +141,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if "services_registered" not in hass.data[DOMAIN]:
         _register_services(hass)
         hass.data[DOMAIN]["services_registered"] = True
+
+    # Refresh ALL coordinators so existing entries immediately pick up
+    # the new entry in their all_configs (otherwise they wait 5 min)
+    await _refresh_all_coordinators(hass)
 
     return True
 
@@ -238,11 +242,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     remaining = [
         eid
         for eid in hass.data[DOMAIN]
-        if eid not in ("frontend_loaded", "services_registered", "database")
+        if eid not in ("frontend_loaded", "services_registered", "database", "_setup_lock")
     ]
     if not remaining and "database" in hass.data[DOMAIN]:
         db: EstrannaisDatabase = hass.data[DOMAIN].pop("database")
         await db.async_close()
+    elif remaining:
+        # Refresh remaining coordinators so they drop the removed entry
+        await _refresh_all_coordinators(hass)
 
     return unload_ok
 

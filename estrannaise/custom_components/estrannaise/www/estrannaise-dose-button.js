@@ -1,10 +1,42 @@
 /**
  * Estrannaise HRT Monitor - Dose Logging Button Card
  *
- * A simple button that logs a dose when clicked via the estrannaise.log_dose service.
+ * Shows a dialog when clicked to select ester/model and dose amount,
+ * then calls estrannaise.log_dose service.
  */
 
-const DOSE_BUTTON_VERSION = '1.1.0';
+const DOSE_BUTTON_VERSION = '2.0.0';
+
+// Friendly ester names keyed by model prefix
+const ESTER_NAMES = {
+  E: 'Estradiol',
+  EB: 'Estradiol Benzoate',
+  EV: 'Estradiol Valerate',
+  EEn: 'Estradiol Enanthate',
+  EC: 'Estradiol Cypionate',
+  EUn: 'Estradiol Undecylate',
+};
+
+const METHOD_NAMES = {
+  im: 'IM',
+  subq: 'SubQ',
+  patch: 'Patch',
+  oral: 'Oral',
+};
+
+function friendlyModelName(model) {
+  if (!model) return model;
+  // "EEn im" → "Estradiol Enanthate (IM)"
+  // "E oral" → "Estradiol (Oral)"
+  // "patch tw" / "patch ow" → "Estradiol (Patch)"
+  if (model.startsWith('patch')) return 'Estradiol (Patch)';
+  const parts = model.split(' ');
+  const esterKey = parts[0];
+  const methodKey = parts[1] || '';
+  const esterName = ESTER_NAMES[esterKey] || esterKey;
+  const methodName = METHOD_NAMES[methodKey] || methodKey.toUpperCase();
+  return `${esterName} (${methodName})`;
+}
 
 if (!customElements.get('estrannaise-dose-button')) {
 
@@ -23,7 +55,6 @@ if (!customElements.get('estrannaise-dose-button')) {
       this.config = {
         label: 'Log Dose',
         icon: 'mdi:needle',
-        confirm: true,
         ...config,
       };
     }
@@ -83,6 +114,84 @@ if (!customElements.get('estrannaise-dose-button')) {
           margin-top: 4px;
         }
         .card.confirmed .info { color: rgba(255,255,255,0.8); }
+
+        /* Dialog overlay */
+        .overlay {
+          display: none;
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.5);
+          z-index: 999;
+          justify-content: center;
+          align-items: center;
+        }
+        .overlay.open { display: flex; }
+        .dialog {
+          background: var(--ha-card-background, var(--card-background-color, #fff));
+          border-radius: 16px;
+          padding: 24px;
+          min-width: 280px;
+          max-width: 360px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        .dialog-title {
+          font-size: 18px;
+          font-weight: 600;
+          color: var(--primary-text-color, #212121);
+          margin-bottom: 16px;
+        }
+        .field {
+          margin-bottom: 14px;
+        }
+        .field-label {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--secondary-text-color, #757575);
+          margin-bottom: 4px;
+        }
+        .field select, .field input {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid var(--divider-color, #e0e0e0);
+          border-radius: 8px;
+          font-size: 15px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color, #212121);
+          box-sizing: border-box;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+        .field select:focus, .field input:focus {
+          border-color: var(--primary-color, #03a9f4);
+        }
+        .dialog-buttons {
+          display: flex;
+          gap: 8px;
+          margin-top: 20px;
+        }
+        .dialog-buttons button {
+          flex: 1;
+          padding: 10px 16px;
+          border: none;
+          border-radius: 8px;
+          font-size: 15px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: opacity 0.15s;
+        }
+        .dialog-buttons button:hover { opacity: 0.85; }
+        .btn-cancel {
+          background: var(--divider-color, #e0e0e0);
+          color: var(--primary-text-color, #212121);
+        }
+        .btn-confirm {
+          background: var(--primary-color, #03a9f4);
+          color: white;
+        }
+        .btn-confirm:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
+        }
       `;
 
       const card = document.createElement('div');
@@ -92,10 +201,44 @@ if (!customElements.get('estrannaise-dose-button')) {
         <div class="label">${this._escapeHtml(this.config.label)}</div>
         <div class="info"></div>
       `;
-      card.addEventListener('click', () => this._handleClick());
+      card.addEventListener('click', () => this._openDialog());
+
+      // Dialog overlay
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      overlay.innerHTML = `
+        <div class="dialog">
+          <div class="dialog-title">Log Dose</div>
+          <div class="field">
+            <div class="field-label">Ester</div>
+            <select class="dose-model"></select>
+          </div>
+          <div class="field">
+            <div class="field-label">Dose amount (mg)</div>
+            <input type="number" class="dose-amount" min="0.1" max="100" step="0.5">
+          </div>
+          <div class="dialog-buttons">
+            <button class="btn-cancel">Cancel</button>
+            <button class="btn-confirm">Log Dose</button>
+          </div>
+        </div>
+      `;
+
+      // Close on overlay background click
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this._closeDialog();
+      });
+      overlay.querySelector('.btn-cancel').addEventListener('click', () => this._closeDialog());
+      overlay.querySelector('.btn-confirm').addEventListener('click', () => this._confirmDose());
+
+      // Update dose default when model selection changes
+      overlay.querySelector('.dose-model').addEventListener('change', (e) => {
+        this._onModelChange(e.target.value);
+      });
 
       this.shadowRoot.appendChild(style);
       this.shadowRoot.appendChild(card);
+      this.shadowRoot.appendChild(overlay);
     }
 
     _updateState() {
@@ -108,40 +251,132 @@ if (!customElements.get('estrannaise-dose-button')) {
       const card = this.shadowRoot.querySelector('.card');
       const info = this.shadowRoot.querySelector('.info');
 
-      // Disable if mode is automatic-only
       if (mode === 'automatic' && !this.config.force_enable) {
         card.classList.add('disabled');
         if (info) info.textContent = 'Automatic dosing enabled';
       } else {
         card.classList.remove('disabled');
-        // Card config dose_mg overrides entity attrs
         const doseMg = this.config.dose_mg || attrs.dose_mg || '';
         const model = this.config.model || attrs.model || '';
-        // Show friendly ester name if available
-        const esters = attrs.esters || {};
-        let displayModel = model;
-        if (model) {
-          const modelParts = model.split(' ');
-          const esterName = esters[modelParts[0]];
-          if (esterName) displayModel = esterName;
-        }
-        if (info) info.textContent = doseMg && displayModel ? `${doseMg}mg ${displayModel}` : '';
+        if (info) info.textContent = doseMg && model ? `${doseMg}mg ${friendlyModelName(model)}` : '';
       }
     }
 
-    async _handleClick() {
+    _getAvailableModels() {
+      const entity = this._hass && this._hass.states[this.config.entity];
+      if (!entity) return [];
+
+      const attrs = entity.attributes || {};
+      const allConfigs = attrs.all_configs || [];
+
+      // Build unique model entries from all configured entries
+      const seen = new Set();
+      const models = [];
+      for (const cfg of allConfigs) {
+        const model = cfg.model;
+        if (!model || seen.has(model)) continue;
+        seen.add(model);
+        models.push({
+          model,
+          dose_mg: cfg.dose_mg,
+          label: friendlyModelName(model),
+        });
+      }
+
+      // If no configs found, fall back to entity's own model
+      if (models.length === 0) {
+        const model = this.config.model || attrs.model;
+        if (model) {
+          models.push({
+            model,
+            dose_mg: this.config.dose_mg || attrs.dose_mg || 4,
+            label: friendlyModelName(model),
+          });
+        }
+      }
+
+      return models;
+    }
+
+    _openDialog() {
       if (!this._hass || this._busy) return;
       const entity = this._hass.states[this.config.entity];
       if (!entity) return;
 
       const attrs = entity.attributes || {};
-      const model = this.config.model || attrs.model || 'EEn im';
-      const doseMg = this.config.dose_mg || attrs.dose_mg || 4;
+      const mode = attrs.mode || 'manual';
+      if (mode === 'automatic' && !this.config.force_enable) return;
 
-      // Disable button while service call is in-flight
+      const models = this._getAvailableModels();
+      const select = this.shadowRoot.querySelector('.dose-model');
+      const input = this.shadowRoot.querySelector('.dose-amount');
+
+      // Populate model dropdown
+      select.innerHTML = '';
+      const currentModel = this.config.model || attrs.model || '';
+      for (const m of models) {
+        const opt = document.createElement('option');
+        opt.value = m.model;
+        opt.textContent = m.label;
+        if (m.model === currentModel) opt.selected = true;
+        select.appendChild(opt);
+      }
+
+      // Set default dose from selected model's config or card config
+      const selectedModel = models.find(m => m.model === select.value) || models[0];
+      input.value = this.config.dose_mg || (selectedModel && selectedModel.dose_mg) || attrs.dose_mg || 4;
+
+      // Update dose unit label for patches
+      const doseLabel = this.shadowRoot.querySelector('.dose-amount').closest('.field').querySelector('.field-label');
+      if (select.value && select.value.startsWith('patch')) {
+        doseLabel.textContent = 'Dose amount (mcg/day)';
+      } else {
+        doseLabel.textContent = 'Dose amount (mg)';
+      }
+
+      this.shadowRoot.querySelector('.overlay').classList.add('open');
+    }
+
+    _onModelChange(modelValue) {
+      const entity = this._hass && this._hass.states[this.config.entity];
+      if (!entity) return;
+
+      const attrs = entity.attributes || {};
+      const allConfigs = attrs.all_configs || [];
+      const input = this.shadowRoot.querySelector('.dose-amount');
+
+      // Update dose default to match selected model's configured dose
+      const cfg = allConfigs.find(c => c.model === modelValue);
+      if (cfg) {
+        input.value = cfg.dose_mg;
+      }
+
+      // Update unit label
+      const doseLabel = input.closest('.field').querySelector('.field-label');
+      if (modelValue && modelValue.startsWith('patch')) {
+        doseLabel.textContent = 'Dose amount (mcg/day)';
+      } else {
+        doseLabel.textContent = 'Dose amount (mg)';
+      }
+    }
+
+    _closeDialog() {
+      this.shadowRoot.querySelector('.overlay').classList.remove('open');
+    }
+
+    async _confirmDose() {
+      if (this._busy) return;
+
+      const select = this.shadowRoot.querySelector('.dose-model');
+      const input = this.shadowRoot.querySelector('.dose-amount');
+      const model = select.value;
+      const doseMg = parseFloat(input.value);
+
+      if (!model || !doseMg || doseMg <= 0) return;
+
       this._busy = true;
-      const card = this.shadowRoot.querySelector('.card');
-      card.classList.add('disabled');
+      const confirmBtn = this.shadowRoot.querySelector('.btn-confirm');
+      confirmBtn.disabled = true;
 
       try {
         await this._hass.callService('estrannaise', 'log_dose', {
@@ -150,28 +385,34 @@ if (!customElements.get('estrannaise-dose-button')) {
           dose_mg: doseMg,
         });
 
-        // Visual confirmation
-        card.classList.remove('disabled');
+        this._closeDialog();
+
+        // Visual confirmation on the card
+        const card = this.shadowRoot.querySelector('.card');
         const label = this.shadowRoot.querySelector('.label');
         const prevLabel = label.textContent;
         card.classList.add('confirmed');
         label.textContent = 'Dose logged!';
 
+        const info = this.shadowRoot.querySelector('.info');
+        const prevInfo = info.textContent;
+        info.textContent = `${doseMg}mg ${friendlyModelName(model)}`;
+
         setTimeout(() => {
           card.classList.remove('confirmed');
           label.textContent = prevLabel;
+          info.textContent = prevInfo;
           this._busy = false;
         }, 2000);
       } catch (err) {
         console.error('Failed to log dose:', err);
-        card.classList.remove('disabled');
+        confirmBtn.disabled = false;
+        this._busy = false;
+
         const label = this.shadowRoot.querySelector('.label');
         const prevLabel = label.textContent;
         label.textContent = 'Error!';
-        setTimeout(() => {
-          label.textContent = prevLabel;
-          this._busy = false;
-        }, 2000);
+        setTimeout(() => { label.textContent = prevLabel; }, 2000);
       }
     }
 
@@ -213,12 +454,31 @@ if (!customElements.get('estrannaise-dose-button-editor')) {
       form.hass = this._hass;
       form.schema = [
         { name: 'entity', selector: { entity: { domain: 'sensor' } } },
-        { name: 'dose_mg', label: 'Dose amount (mg)', selector: { number: { min: 0.1, max: 100, step: 0.5, mode: 'box' } } },
+        {
+          name: 'model',
+          label: 'Default ester (pre-selected in dialog)',
+          selector: { select: {
+            options: [
+              { value: 'auto', label: 'Auto (from entity)' },
+              { value: 'EB im', label: 'Estradiol Benzoate (IM)' },
+              { value: 'EV im', label: 'Estradiol Valerate (IM)' },
+              { value: 'EEn im', label: 'Estradiol Enanthate (IM)' },
+              { value: 'EC im', label: 'Estradiol Cypionate (IM)' },
+              { value: 'EUn im', label: 'Estradiol Undecylate (IM)' },
+              { value: 'EUn casubq', label: 'Estradiol Undecylate (SubQ)' },
+              { value: 'E oral', label: 'Estradiol (Oral)' },
+              { value: 'patch', label: 'Estradiol (Patch)' },
+            ],
+            mode: 'dropdown',
+          }},
+        },
+        { name: 'dose_mg', label: 'Default dose (mg)', selector: { number: { min: 0.1, max: 100, step: 0.5, mode: 'box' } } },
         { name: 'label', label: 'Button label', selector: { text: {} } },
         { name: 'icon', label: 'Icon', selector: { icon: {} } },
       ];
       form.data = {
         entity: this.config.entity || '',
+        model: this.config.model || 'auto',
         dose_mg: this.config.dose_mg || '',
         label: this.config.label || 'Log Dose',
         icon: this.config.icon || 'mdi:needle',
@@ -226,7 +486,8 @@ if (!customElements.get('estrannaise-dose-button-editor')) {
       form.computeLabel = (schema) => {
         const labels = {
           entity: 'Entity',
-          dose_mg: 'Dose amount (mg)',
+          model: 'Default ester',
+          dose_mg: 'Default dose (mg)',
           label: 'Button label',
           icon: 'Icon',
         };
@@ -235,7 +496,8 @@ if (!customElements.get('estrannaise-dose-button-editor')) {
       form.addEventListener('value-changed', (ev) => {
         const newData = ev.detail.value;
         this.config = { ...this.config, ...newData };
-        // Remove empty dose_mg so it falls back to entity default
+        // Remove 'auto' / empty optional fields so they fall back to entity defaults
+        if (!this.config.model || this.config.model === 'auto') delete this.config.model;
         if (!this.config.dose_mg) delete this.config.dose_mg;
         const event = new Event('config-changed', { bubbles: true, composed: true });
         event.detail = { config: this.config };

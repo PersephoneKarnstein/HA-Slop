@@ -275,6 +275,22 @@ class EstrannaisDatabase:
 
         return (max(0.0, min(2.0, factor)), variance)
 
+    # ── Auto dose tracking ─────────────────────────────────────────────────
+
+    async def get_auto_dose_timestamps(
+        self, config_entry_id: str
+    ) -> set[float]:
+        """Return timestamps of all automatic doses for an entry."""
+        assert self._db is not None
+        cursor = await self._db.execute(
+            "SELECT timestamp FROM doses "
+            "WHERE config_entry_id = ? AND source = 'automatic' "
+            "ORDER BY timestamp ASC",
+            (config_entry_id,),
+        )
+        rows = await cursor.fetchall()
+        return {row["timestamp"] for row in rows}
+
     # ── Stale dose pruning ───────────────────────────────────────────────────
 
     async def prune_stale_doses(self, config_entry_id: str) -> int:

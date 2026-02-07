@@ -5,7 +5,13 @@
         "title": "Estrannaise HRT Monitor",
         "description": "Set up estrogen level monitoring.\n\nNote: This integration provides pharmacokinetic APPROXIMATIONS of blood serum levels based on population models. Individual results may vary significantly. Always confirm with blood tests.",
         "data": {
-          "ester": "Estradiol ester",
+          "ester": "Estradiol ester"
+        }
+      },
+      "method": {
+        "title": "Dosing Method",
+        "description": "Select how the estradiol will be administered.",
+        "data": {
           "method": "Dosing method"
         }
       },
@@ -42,14 +48,16 @@
         "title": "Display & Integration Settings",
         "data": {
           "units": "Measurement units",
-          "enable_calendar": "Add dose schedule to HA calendar"
+          "enable_calendar": "Add dose schedule to HA calendar",
+          "backfill_doses": "Backfill past doses (enable if already on HRT)"
         }
       }
     },
     "error": {
       "unknown": "An unexpected error occurred.",
       "invalid_combination": "This ester/method combination is not available.",
-      "not_yet_supported": "This combination is not yet supported."
+      "not_yet_supported": "This combination is not yet supported.",
+      "oral_estradiol_only": "Oral dosing is only available for micronized Estradiol, not esterified forms."
     },
     "abort": {
       "already_configured": "This regimen is already configured."
@@ -70,6 +78,7 @@
           "phase_days": "Cycle day offset (0-27)",
           "units": "Measurement units",
           "enable_calendar": "Add dose schedule to HA calendar",
+          "backfill_doses": "Backfill past doses (enable if already on HRT)",
           "reset_data": "Reset all saved data (doses and blood tests)"
         }
       }

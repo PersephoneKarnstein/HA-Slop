@@ -15,6 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import (
     AVAILABLE_UNITS,
     CONF_AUTO_REGIMEN,
+    CONF_BACKFILL_DOSES,
     CONF_DOSE_MG,
     CONF_DOSE_TIME,
     CONF_ENABLE_CALENDAR,
@@ -26,6 +27,7 @@ from .const import (
     CONF_TARGET_TYPE,
     CONF_UNITS,
     DEFAULT_AUTO_REGIMEN,
+    DEFAULT_BACKFILL_DOSES,
     DEFAULT_DOSE_MG,
     DEFAULT_DOSE_TIME,
     DEFAULT_ENABLE_CALENDAR,
@@ -44,6 +46,7 @@ from .const import (
     compute_e2_at_time,
     compute_suggested_regimen,
     resolve_model_key,
+    terminal_elimination_days,
 )
 from .database import EstrannaisDatabase
 
@@ -105,13 +108,17 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 CONF_PHASE_DAYS,
                 data.get(CONF_PHASE_DAYS, DEFAULT_PHASE_DAYS),
             ),
+            "backfill_doses": opts.get(
+                CONF_BACKFILL_DOSES,
+                data.get(CONF_BACKFILL_DOSES, DEFAULT_BACKFILL_DOSES),
+            ),
         }
 
     def _get_all_entry_configs(self) -> list[dict[str, Any]]:
         """Get configs from all estrannaise entries."""
         configs = []
         domain_data = self.hass.data.get(DOMAIN, {})
-        for key, val in domain_data.items():
+        for key, val in list(domain_data.items()):
             if isinstance(val, EstrannaisCoordinator):
                 cfg = val._get_config()
                 cfg["entry_id"] = val.config_entry.entry_id
@@ -250,16 +257,133 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return doses
 
+    async def _persist_auto_doses(
+        self, config: dict[str, Any], now: float
+    ) -> None:
+        """Write past automatic doses to the database.
+
+        Computes which scheduled doses should have occurred between the
+        pharmacokinetic lookback window and *now*, checks which are already
+        persisted, and inserts the missing ones.
+        """
+        from datetime import datetime, timezone
+
+        mode = config.get("mode", "manual")
+        if mode not in (MODE_AUTOMATIC, MODE_BOTH):
+            return
+
+        entry_id = self.config_entry.entry_id
+        ester = config["ester"]
+        method = config["method"]
+
+        # Parse dose time-of-day
+        dose_time_str = config.get("dose_time", "08:00")
+        try:
+            parts = dose_time_str.split(":")
+            hour = int(parts[0])
+            minute = int(parts[1]) if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            hour, minute = 8, 0
+        tod_sec = hour * 3600 + minute * 60
+
+        # Resolve schedule(s)
+        schedules: list[dict[str, Any]] = []
+        if config.get("auto_regimen", False):
+            target_type = config.get("target_type", "target_range")
+            suggested = compute_suggested_regimen(ester, method, target_type)
+            if suggested and "schedules" in suggested:
+                schedules = suggested["schedules"]
+            elif suggested:
+                schedules = [{
+                    "dose_mg": suggested["dose_mg"],
+                    "interval_days": suggested["interval_days"],
+                    "phase_days": 0.0,
+                    "model_key": suggested.get("model_key", ""),
+                }]
+
+        if not schedules:
+            dose_mg = config["dose_mg"]
+            interval_days = config["interval_days"]
+            model_key = resolve_model_key(ester, method, interval_days)
+            if not model_key:
+                return
+            schedules = [{
+                "dose_mg": dose_mg,
+                "interval_days": interval_days,
+                "phase_days": config.get("phase_days", 0.0),
+                "model_key": model_key,
+            }]
+
+        # Fetch existing automatic dose timestamps to avoid duplicates
+        existing_ts = await self.database.get_auto_dose_timestamps(entry_id)
+
+        for sch in schedules:
+            sch_dose = sch["dose_mg"]
+            sch_interval = sch["interval_days"]
+            sch_phase = float(sch.get("phase_days", 0.0))
+            sch_model = sch.get("model_key", "")
+            if not sch_model:
+                sch_model = resolve_model_key(ester, method, sch_interval)
+            if not sch_model:
+                continue
+
+            interval_sec = sch_interval * 86400.0
+
+            if config.get("backfill_doses", False):
+                # Backfill: go back as far as doses are PK-relevant
+                max_age = terminal_elimination_days(sch_model)
+                lookback_ts = now - max_age * 86400.0
+            else:
+                # No backfill: only catch doses since the last refresh
+                lookback_ts = now - DEFAULT_UPDATE_INTERVAL - 60
+
+            # Compute anchor timestamp
+            if sch_phase > 0:
+                epoch_day_now = int(now // 86400)
+                cycle_day_now = epoch_day_now % 28
+                days_back = (cycle_day_now - int(sch_phase)) % 28
+                anchor_day = epoch_day_now - days_back
+                anchor_ts = anchor_day * 86400.0 + tod_sec
+            else:
+                now_dt = datetime.fromtimestamp(now, tz=timezone.utc)
+                today_dose = now_dt.replace(
+                    hour=hour, minute=minute, second=0, microsecond=0
+                )
+                anchor_ts = today_dose.timestamp()
+
+            # Walk back to find earliest dose within lookback window
+            t = anchor_ts
+            while t > lookback_ts:
+                t -= interval_sec
+            t += interval_sec  # First dose within window
+
+            # Persist past doses that don't already exist
+            while t < now:
+                # Check within 60s tolerance to avoid duplicates
+                if not any(abs(t - ets) < 60 for ets in existing_ts):
+                    await self.database.add_dose(
+                        config_entry_id=entry_id,
+                        model=sch_model,
+                        dose_mg=sch_dose,
+                        timestamp=t,
+                        source="automatic",
+                    )
+                    existing_ts.add(t)
+                t += interval_sec
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from SQLite and compute current state."""
         entry_id = self.config_entry.entry_id
         config = self._get_config()
         now = time.time()
 
+        # Persist any past automatic doses that haven't been recorded yet
+        await self._persist_auto_doses(config, now)
+
         # Prune old doses for this entry
         await self.database.prune_stale_doses(entry_id)
 
-        # Get ALL manual doses from database (cross-entry)
+        # Get ALL doses from database (manual + persisted automatic, cross-entry)
         all_manual_doses = await self.database.get_all_doses()
 
         # Generate automatic recurring doses for ALL entries

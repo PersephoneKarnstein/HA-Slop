@@ -97,8 +97,13 @@ const ESTER_METHOD_COMBO = {
   'EEn|im': 'EEn im',
   'EC|im': 'EC im',
   'EUn|im': 'EUn im',
+  'EB|subq': 'EB im',
+  'EV|subq': 'EV im',
+  'EEn|subq': 'EEn im',
+  'EC|subq': 'EC im',
   'EUn|subq': 'EUn casubq',
   'E|patch': 'patch', // resolved below based on interval
+  'E|oral': 'E oral',
 };
 
 function resolveModelKey(ester, method, intervalDays) {
