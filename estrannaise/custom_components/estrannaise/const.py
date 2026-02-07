@@ -261,12 +261,14 @@ def compute_suggested_regimen(
             continue
 
         dose = target_trough / trough_per_mg
-        # Round to nearest 0.5 mg (or 5 mcg/day for patches)
-        if method == "patch":
-            dose = round(dose * 2) / 2  # 0.5 mcg/day increments
+        if model_key in PATCH_WEAR_DAYS:
+            # dose is in mcg/day (PK model units); convert to mg/day
+            dose /= 1000.0
+            dose = round(dose / 0.025) * 0.025  # 25 mcg/day steps
+            dose = max(0.025, min(0.4, dose))
         else:
             dose = round(dose * 2) / 2  # 0.5 mg increments
-        dose = max(0.5, min(20.0, dose))
+            dose = max(0.5, min(20.0, dose))
 
         if best is None:
             best = {
@@ -428,6 +430,10 @@ def compute_e2_at_time(
             continue
         d, k1, k2, k3 = params
         dose_mg = dose_rec.get("dose_mg", 0.0)
+        # Patch PK parameters are calibrated for mcg/day input;
+        # stored dose_mg is in mg/day, so convert (×1000)
+        if model in PATCH_WEAR_DAYS:
+            dose_mg *= 1000.0
         t_days = (t_now - dose_rec["timestamp"]) / 86400.0
         if model in PATCH_WEAR_DAYS:
             w = PATCH_WEAR_DAYS[model]
@@ -686,8 +692,14 @@ def compute_cycle_fit_regimen(
         if dose_raw < 0.25:
             continue
         intv, phase, _ = candidates[si]
-        dose_mg = round(dose_raw * 2.0) / 2.0
-        dose_mg = max(0.5, min(20.0, dose_mg))
+        if model_key in PATCH_WEAR_DAYS:
+            # dose_raw in mcg/day (PK units); convert to mg/day
+            dose_mg = dose_raw / 1000.0
+            dose_mg = round(dose_mg / 0.025) * 0.025
+            dose_mg = max(0.025, min(0.4, dose_mg))
+        else:
+            dose_mg = round(dose_raw * 2.0) / 2.0
+            dose_mg = max(0.5, min(20.0, dose_mg))
         schedules.append(
             {
                 "dose_mg": dose_mg,

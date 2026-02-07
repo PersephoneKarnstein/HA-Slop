@@ -84,7 +84,8 @@ function computeE2(tDays, dose, model, pkParams, patchWearDays) {
   if (!params) return 0;
   const [d, k1, k2, k3] = params;
   if (patchWearDays && patchWearDays[model] !== undefined) {
-    return e2Patch3C(tDays, dose, d, k1, k2, k3, patchWearDays[model]);
+    // Patch PK params are calibrated for mcg/day; stored dose is mg/day
+    return e2Patch3C(tDays, dose * 1000, d, k1, k2, k3, patchWearDays[model]);
   }
   return e2Curve3C(tDays, dose, d, k1, k2, k3);
 }
