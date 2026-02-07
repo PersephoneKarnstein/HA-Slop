@@ -287,6 +287,9 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if self._schedules:
                 # Auto-generated: create discrete entries per schedule
                 first = self._schedules[0]
+                backfill = self._data.get(
+                    CONF_BACKFILL_DOSES, DEFAULT_BACKFILL_DOSES
+                )
                 first_data = {
                     CONF_ESTER: ester,
                     CONF_METHOD: method,
@@ -303,6 +306,7 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     CONF_UNITS: units,
                     CONF_ENABLE_CALENDAR: enable_cal,
+                    CONF_BACKFILL_DOSES: backfill,
                 }
                 title = (
                     f"{ester_name} {first['dose_mg']}mg"
@@ -327,6 +331,7 @@ class EstrannaisConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ),
                         CONF_UNITS: units,
                         CONF_ENABLE_CALENDAR: enable_cal,
+                        CONF_BACKFILL_DOSES: backfill,
                         "subsidiary": True,
                     }
                     self.hass.async_create_task(

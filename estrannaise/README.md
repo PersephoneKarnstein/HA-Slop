@@ -74,7 +74,7 @@ The chart displays:
 - Dose chevrons at the bottom (hover near one to see a spike line with dose info)
 - Blood test markers (red dots)
 - "Now" vertical line separating past from prediction
-- Coincident doses from multiple regimens are merged and shown as a combined amount
+- Coincident doses of the same ester are merged and shown as a combined amount
 
 ### Log Dose button
 

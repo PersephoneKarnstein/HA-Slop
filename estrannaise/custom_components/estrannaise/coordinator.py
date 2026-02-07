@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import time
 from datetime import timedelta
 from typing import Any
@@ -436,8 +435,9 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Blood test baseline (zero-state handling)
         # When predicted E2 is negligible (<1 pg/mL) at all test times,
         # multiplicative scaling cannot work. Use the most recent blood test
-        # as a baseline anchor that decays forward using the slowest
-        # elimination constant.
+        # as a persistent baseline offset. The blood test represents the
+        # individual's actual E2 from sources the PK model can't explain
+        # (endogenous production, unlogged doses, etc.) — assumed to persist.
         baseline_e2 = 0.0
         baseline_test_ts = 0.0
         if all_blood_tests:
@@ -447,19 +447,8 @@ class EstrannaisCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if all_negligible:
                 latest = max(all_blood_tests, key=lambda t: t["timestamp"])
-                test_level = latest["level_pg_ml"]
-                age_days = (now - latest["timestamp"]) / 86400.0
+                baseline_e2 = latest["level_pg_ml"]
                 baseline_test_ts = latest["timestamp"]
-                model_key = resolve_model_key(
-                    config["ester"],
-                    config["method"],
-                    config["interval_days"],
-                )
-                if model_key and age_days >= 0:
-                    params = PK_PARAMETERS.get(model_key)
-                    if params:
-                        k3 = params[3]
-                        baseline_e2 = test_level * math.exp(-k3 * age_days)
 
         # Include baseline in displayed E2 value and reset bogus scaling
         if baseline_e2 > 0:

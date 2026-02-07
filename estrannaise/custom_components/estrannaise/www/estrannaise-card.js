@@ -575,14 +575,13 @@ if (!customElements.get('estrannaise-card')) {
       const histX = [], histY = [], predX = [], predY = [];
       const bandUpperX = [], bandUpperY = [], bandLowerX = [], bandLowerY = [];
 
-      // Blood test baseline (zero-state handling)
+      // Blood test baseline (zero-state handling only)
+      // When the PK model predicts ~0 at all blood test times, multiplicative
+      // scaling can't work. In that case, the blood test level is used as a
+      // persistent flat offset — it represents E2 from sources the model
+      // can't explain (endogenous production, unlogged doses, etc.).
       const baselineE2 = attrs.baseline_e2 || 0;
       const baselineTestTs = attrs.baseline_test_ts || 0;
-      let baselineK3 = 0;
-      if (baselineE2 > 0) {
-        const modelParams = pkParams[attrs.model];
-        if (modelParams) baselineK3 = modelParams[3];
-      }
 
       // Confidence band multipliers (if variance > 0 and enough blood tests)
       const showBands = scalingVariance > 0 && bloodTests.length >= 2;
@@ -598,13 +597,9 @@ if (!customElements.get('estrannaise-card')) {
         }
         let e2 = e2raw * scalingFactor * cf;
 
-        // Add baseline offset (decaying from blood test, only after test time)
-        // baseline_e2 = test_level * exp(-k3*(now-test_time)/86400)
-        // baseline_at_t = baseline_e2 * exp(-k3*(t-now)/86400)
-        //               = test_level * exp(-k3*(t-test_time)/86400)
-        if (baselineE2 > 0 && baselineK3 > 0 && t >= baselineTestTs) {
-          const dtDays = (t - now) / 86400;
-          e2 += baselineE2 * Math.exp(-baselineK3 * dtDays) * cf;
+        // Add persistent baseline offset (flat, after blood test time)
+        if (baselineE2 > 0 && t >= baselineTestTs) {
+          e2 += baselineE2 * cf;
         }
 
         if (t <= now) {
@@ -953,11 +948,11 @@ if (!customElements.get('estrannaise-card')) {
         }
 
         // ── Dose spike lines (proximity-triggered vertical lines at dose positions) ──
-        this._setupDoseSpikes(layout.margin, tMin, tMax, yAxisMax, mergedDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineK3, baselineTestTs, now, esters);
+        this._setupDoseSpikes(layout.margin, tMin, tMax, yAxisMax, mergedDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineTestTs, now, esters);
       }
     }
 
-    _setupDoseSpikes(margin, tMin, tMax, yMax, displayDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineK3, baselineTestTs, nowSec, esters) {
+    _setupDoseSpikes(margin, tMin, tMax, yMax, displayDoses, allDoses, pkParams, patchWearDays, scalingFactor, cf, units, baselineE2, baselineTestTs, nowSec, esters) {
       if (!this._plotEl) return;
 
       // Remove old spike elements
@@ -990,9 +985,8 @@ if (!customElements.get('estrannaise-card')) {
           e2raw += computeE2(tDays, d.dose_mg, d.model, pkParams, patchWearDays);
         }
         let e2 = e2raw * scalingFactor * cf;
-        if (baselineE2 > 0 && baselineK3 > 0 && dose.timestamp >= baselineTestTs) {
-          const dtDays = (dose.timestamp - nowSec) / 86400;
-          e2 += baselineE2 * Math.exp(-baselineK3 * dtDays) * cf;
+        if (baselineE2 > 0 && dose.timestamp >= baselineTestTs) {
+          e2 += baselineE2 * cf;
         }
         e2 = Math.max(0, e2);
 
